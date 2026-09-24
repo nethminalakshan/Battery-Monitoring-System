@@ -91,6 +91,11 @@ const int   ACS712_SAMPLES     = 1000;    // samples for RMS (~20 ms window)
 const unsigned long TEMP_REFRESH_MS = 5000;
 unsigned long lastTempAt = 0;
 float cachedAmbientC     = -999.0f;  // sentinel: not yet read
+bool  ambientSensorConnected = false; // tracks DS18B20 presence for reconnect detection
+
+// ---- Heartbeat status print (every 5s, independent of CM polling) ----
+const unsigned long HEARTBEAT_MS = 5000;
+unsigned long lastHeartbeatAt = 0;
 
 OneWire            oneWire(PIN_DS18B20);
 DallasTemperature  ambientSensor(&oneWire);
@@ -103,6 +108,9 @@ struct TaReading {
   float irMilliohms;
 };
 
+// ---- Last known TA readings (updated on each CM poll) ------
+TaReading lastTA1 = { false, 0.0f, 0.0f, 0.0f };
+TaReading lastTA2 = { false, 0.0f, 0.0f, 0.0f };
 
 // ---- ACS712 DC current measurement -------------------------
 // Battery system current is DC. At 0A, ACS712 outputs Vcc/2 (~2.50V, ADC ~512).
@@ -125,6 +133,7 @@ float measureCurrent() {
 }
 
 // ---- DS18B20 ambient temperature (background refresh) -----
+// Automatically re-discovers the sensor if it was disconnected and reconnected.
 void updateCachedAmbientTemp(bool force = false) {
   if (!force && (millis() - lastTempAt < TEMP_REFRESH_MS)) return;
   lastTempAt = millis();
@@ -135,20 +144,40 @@ void updateCachedAmbientTemp(bool force = false) {
   ta2Serial.stopListening();
   rs485Serial.stopListening();
 
-  ambientSensor.requestTemperatures();
-  delay(100);  // Allow 9-bit conversion (~94ms) to complete
-  float t = ambientSensor.getTempCByIndex(0);
+  // If sensor was previously missing, re-scan the bus so the library
+  // can re-enumerate any sensor that was plugged back in.
+  if (!ambientSensorConnected) {
+    ambientSensor.begin();  // re-scan OneWire bus for devices
+    ambientSensor.setResolution(9);
+    ambientSensor.setWaitForConversion(true);
+  }
+
+  float t = DEVICE_DISCONNECTED_C;
+  if (ambientSensor.getDeviceCount() > 0) {
+    ambientSensor.requestTemperatures();
+    delay(100);  // Allow 9-bit conversion (~94ms) to complete
+    t = ambientSensor.getTempCByIndex(0);
+  }
 
   rs485Serial.listen();  // always restore RS-485 listener
 
-  Serial.print("[TC] DS18B20 read: ");
-  Serial.print(t, 2);
-  Serial.println(" C");
-
   if (t != DEVICE_DISCONNECTED_C && t > -55.0f && t < 125.0f) {
+    if (!ambientSensorConnected) {
+      Serial.println("[TC] DS18B20 reconnected - ambient sensor detected again");
+    }
+    ambientSensorConnected = true;
     cachedAmbientC = t;
+    Serial.print("[TC] DS18B20 read: ");
+    Serial.print(t, 2);
+    Serial.println(" C");
   } else {
-    Serial.println("[TC] Ambient DS18B20 invalid - keeping cached value");
+    if (ambientSensorConnected) {
+      Serial.println("[TC] DS18B20 disconnected - ambient sensor not found");
+    } else {
+      Serial.println("[TC] DS18B20 not connected - waiting for ambient sensor");
+    }
+    ambientSensorConnected = false;
+    // Keep cachedAmbientC as last known good value (or -999 if never read)
   }
 }
 
@@ -206,6 +235,7 @@ void handleCmRequest() {
   Serial.println("[TC] Poll from CM - gathering data...");
 
   TaReading r1 = pollTaModule(ta1Serial, 1);
+  lastTA1 = r1;  // cache for heartbeat display
   if (r1.valid) {
     Serial.print("[TC] TA1 V="); Serial.print(r1.voltage, 2);
     Serial.print(" T="); Serial.print(r1.tempC, 1);
@@ -213,6 +243,7 @@ void handleCmRequest() {
   } else Serial.println("[TC] TA1 no response");
 
   TaReading r2 = pollTaModule(ta2Serial, 2);
+  lastTA2 = r2;  // cache for heartbeat display
   if (r2.valid) {
     Serial.print("[TC] TA2 V="); Serial.print(r2.voltage, 2);
     Serial.print(" T="); Serial.print(r2.tempC, 1);
@@ -256,7 +287,42 @@ void handleCmRequest() {
   rs485Serial.listen();
 }
 
-// ---- Setup -------------------------------------------------
+// ---- Periodic heartbeat: prints live TC status to serial every 5s ----
+void printStatusHeartbeat() {
+  if (millis() - lastHeartbeatAt < HEARTBEAT_MS) return;
+  lastHeartbeatAt = millis();
+
+  float currentA = measureCurrent();
+
+  Serial.println("-------- [TC] STATUS --------");
+  // TA1 line
+  Serial.print(  "  TA1      : ");
+  if (!lastTA1.valid) {
+    Serial.println("no response");
+  } else {
+    Serial.print(lastTA1.voltage, 2); Serial.print("V  ");
+    Serial.print(lastTA1.tempC,   1); Serial.print("C  ");
+    Serial.print(lastTA1.irMilliohms, 1); Serial.println("mOhm");
+  }
+  // TA2 line
+  Serial.print(  "  TA2      : ");
+  if (!lastTA2.valid) {
+    Serial.println("no response");
+  } else {
+    Serial.print(lastTA2.voltage, 2); Serial.print("V  ");
+    Serial.print(lastTA2.tempC,   1); Serial.print("C  ");
+    Serial.print(lastTA2.irMilliohms, 1); Serial.println("mOhm");
+  }
+  // Ambient sensor
+  Serial.print(  "  AmbSensor: ");
+  Serial.println(ambientSensorConnected ? "CONNECTED" : "DISCONNECTED");
+  Serial.print(  "  Ambient  : ");
+  if (cachedAmbientC <= -900.0f) Serial.println("-- (no reading yet)");
+  else { Serial.print(cachedAmbientC, 2); Serial.println(" C"); }
+  Serial.print(  "  Current  : "); Serial.print(currentA, 3); Serial.println(" A");
+  Serial.println("----------------------------");
+}
+
 void setup() {
   Serial.begin(9600);
   ta1Serial.begin(9600);
@@ -287,10 +353,12 @@ void setup() {
   }
 
   Serial.println("=== RMS-TC Phase 3 Ready - Waiting for CM polls ===");
+  lastHeartbeatAt = millis();
 }
 
 // ---- Main loop ---------------------------------------------
 void loop() {
   handleCmRequest();          // respond to CM when polled
   updateCachedAmbientTemp();  // refresh ambient temp every 5s in background
+  printStatusHeartbeat();     // print live status every 5s to serial monitor
 }

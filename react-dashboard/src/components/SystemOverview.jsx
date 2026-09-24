@@ -35,7 +35,7 @@ export default function SystemOverview({
         </div>
 
         <div className="gauge-container">
-          <svg viewBox="0 0 200 115" width="260" height="150" style={{ overflow: 'visible' }}>
+          <svg viewBox="0 0 200 115" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style={{ overflow: 'visible' }}>
             <defs>
               <linearGradient id="currentGrad" x1="0%" y1="0%" x2="100%" y2="0%">
                 <stop offset="0%" stopColor="#06b6d4" />

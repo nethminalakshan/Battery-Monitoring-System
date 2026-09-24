@@ -44,7 +44,7 @@ const int   ADC_MAX  = 1023;
 
 // ---- IR test ----
 const float LOAD_RESISTANCE  = 12.0;
-const int   IR_PULSE_MS      = 30;
+const int   IR_PULSE_MS      = 30;*
 const int   SAMPLES_PER_READ = 8;
 
 // ---- Protocol ----
@@ -56,6 +56,11 @@ const int   SAMPLES_PER_READ = 8;
 const unsigned long TEMP_READ_INTERVAL_MS = 5000; // background refresh every 5s
 unsigned long lastTempReadAt = 0;
 float cachedTempC = -999.0; // obvious sentinel: no sensor detected yet / all reads failed
+bool  sensorConnected = false;  // tracks DS18B20 presence for reconnect detection
+
+// ---- Heartbeat status print (every 5s, independent of TC polling) ----
+const unsigned long HEARTBEAT_MS = 5000;
+unsigned long lastHeartbeatAt = 0;
 
 OneWire oneWire(PIN_ONEWIRE);
 DallasTemperature tempSensor(&oneWire);
@@ -90,6 +95,7 @@ float measureInternalResistance() {
 }
 
 // Runs in the background, NOT during request handling
+// Automatically re-discovers DS18B20 if it was disconnected and reconnected.
 void updateCachedTemperature() {
   if (millis() - lastTempReadAt < TEMP_READ_INTERVAL_MS) return;
   lastTempReadAt = millis();
@@ -98,15 +104,38 @@ void updateCachedTemperature() {
   // precise timing - reduces interrupt contention with SoftwareSerial
   chainSerial.stopListening();
 
-  tempSensor.requestTemperatures();
-  float t = tempSensor.getTempCByIndex(0);
+  // If sensor was previously missing, re-scan the bus so the library
+  // can re-enumerate any sensor that was plugged back in.
+  if (!sensorConnected) {
+    tempSensor.begin();  // re-scan OneWire bus for devices
+  }
+
+  float t = DEVICE_DISCONNECTED_C;
+  if (tempSensor.getDeviceCount() > 0) {
+    tempSensor.requestTemperatures();
+    delay(100); // wait for 9-bit conversion (~94 ms)
+    t = tempSensor.getTempCByIndex(0);
+  }
 
   chainSerial.listen();
 
-  if (t != DEVICE_DISCONNECTED_C) {
+  if (t != DEVICE_DISCONNECTED_C && t > -55.0f && t < 125.0f) {
+    if (!sensorConnected) {
+      Serial.println("[TA-1] DS18B20 reconnected - sensor detected again");
+    }
+    sensorConnected = true;
     cachedTempC = t; // only update on a good read, keep last-known-good otherwise
+    Serial.print("[TA-1] Temp: ");
+    Serial.print(t, 2);
+    Serial.println(" C");
   } else {
-    Serial.println("[TA-1] Temp read failed, keeping cached value");
+    if (sensorConnected) {
+      Serial.println("[TA-1] DS18B20 disconnected - sensor not found");
+    } else {
+      Serial.println("[TA-1] DS18B20 not connected - waiting for sensor");
+    }
+    sensorConnected = false;
+    // Keep cachedTempC as last known good value (or -999 if never read)
   }
 }
 
@@ -154,6 +183,25 @@ void handleRequest() {
   Serial.println("mOhm");
 }
 
+// ---- Periodic heartbeat: prints live readings to serial every 5s ----
+void printStatusHeartbeat() {
+  if (millis() - lastHeartbeatAt < HEARTBEAT_MS) return;
+  lastHeartbeatAt = millis();
+
+  float voltage     = readCellVoltage();
+  float irMilliohms = measureInternalResistance();
+
+  Serial.println("-------- [TA-1] STATUS --------");
+  Serial.print(  "  Sensor   : ");
+  Serial.println(sensorConnected ? "CONNECTED" : "DISCONNECTED");
+  Serial.print(  "  Voltage  : "); Serial.print(voltage, 3);     Serial.println(" V");
+  Serial.print(  "  Temp     : ");
+  if (cachedTempC <= -900.0f) Serial.println("-- (no reading yet)");
+  else { Serial.print(cachedTempC, 2); Serial.println(" C"); }
+  Serial.print(  "  Int.Res  : "); Serial.print(irMilliohms, 2); Serial.println(" mOhm");
+  Serial.println("------------------------------");
+}
+
 void setup() {
   Serial.begin(9600);
   chainSerial.begin(9600);
@@ -179,9 +227,12 @@ void setup() {
   // Do one temperature read at boot so cachedTempC isn't just the default
   lastTempReadAt = 0;
   updateCachedTemperature();
+
+  lastHeartbeatAt = millis();
 }
 
 void loop() {
   handleRequest();
   updateCachedTemperature(); // only actually runs every 5s, rest of the time it's a cheap check
+  printStatusHeartbeat();    // print live status every 5s to serial monitor
 }
