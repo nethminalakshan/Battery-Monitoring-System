@@ -44,7 +44,7 @@ const int   ADC_MAX  = 1023;
 
 // ---- IR test ----
 const float LOAD_RESISTANCE  = 12.0;
-const int   IR_PULSE_MS      = 30;*
+const int   IR_PULSE_MS      = 30;
 const int   SAMPLES_PER_READ = 8;
 
 // ---- Protocol ----

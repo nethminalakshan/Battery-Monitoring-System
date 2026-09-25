@@ -5,7 +5,6 @@ import BatteryCard from './components/BatteryCard';
 import SystemOverview from './components/SystemOverview';
 import AnalyticsCharts from './components/AnalyticsCharts';
 import PreviousLogsPortal from './components/PreviousLogsPortal';
-import MongoConfigModal from './components/MongoConfigModal';
 import LiveLogsConsole from './components/LiveLogsConsole';
 import { Zap, ShieldAlert, Sparkles, Database, RefreshCw } from 'lucide-react';
 import './App.css';
@@ -43,9 +42,7 @@ export default function App() {
   const [logFilters, setLogFilters] = useState({ batteryId: '', level: '' });
   const [isLogsLoading, setIsLogsLoading] = useState(false);
 
-  // Modals & Actions
-  const [isMongoModalOpen, setIsMongoModalOpen] = useState(false);
-  const [isTestingMongo, setIsTestingMongo] = useState(false);
+  // Actions
   const [isSeeding, setIsSeeding] = useState(false);
 
   const mqttClientRef = useRef(null);
@@ -262,32 +259,6 @@ export default function App() {
     fetchHistoricalAnalytics(newTf);
   };
 
-  // -------------------------------------------------------------
-  // 3. Handlers for MongoDB URI Update & Seeding
-  // -------------------------------------------------------------
-  const handleUpdateMongoUri = async (uri) => {
-    setIsTestingMongo(true);
-    try {
-      const res = await fetch(`${API_BASE}/config/mongo-uri`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uri })
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setDbStatus(data.status);
-        await refreshAll();
-        return { success: true };
-      } else {
-        return { success: false, error: data.message || 'Connection failed' };
-      }
-    } catch (err) {
-      return { success: false, error: err.message };
-    } finally {
-      setIsTestingMongo(false);
-    }
-  };
-
   const handleSeedData = async () => {
     setIsSeeding(true);
     try {
@@ -310,19 +281,6 @@ export default function App() {
     }
   };
 
-  const handleClearData = async () => {
-    if (!window.confirm('Are you sure you want to clear test logs from MongoDB Atlas?')) return;
-    try {
-      const res = await fetch(`${API_BASE}/logs/clear`, { method: 'DELETE' });
-      if (res.ok) {
-        await refreshAll();
-        addLiveLog('Cleared test logs.', 'warn');
-      }
-    } catch {
-      // ignore
-    }
-  };
-
   return (
     <div className="app-container">
       {/* Top Navigation */}
@@ -332,7 +290,6 @@ export default function App() {
         dbStatus={dbStatus}
         mqttStatus={mqttStatus}
         statusChips={statusChips}
-        onOpenMongoModal={() => setIsMongoModalOpen(true)}
         onRefreshData={refreshAll}
         isRefreshing={isRefreshing}
       />
@@ -421,17 +378,6 @@ export default function App() {
         )}
       </main>
 
-      {/* MongoDB Atlas Configuration Modal */}
-      <MongoConfigModal
-        isOpen={isMongoModalOpen}
-        onClose={() => setIsMongoModalOpen(false)}
-        dbStatus={dbStatus}
-        onUpdateUri={handleUpdateMongoUri}
-        onSeedData={handleSeedData}
-        onClearData={handleClearData}
-        isTesting={isTestingMongo}
-        isSeeding={isSeeding}
-      />
     </div>
   );
 }

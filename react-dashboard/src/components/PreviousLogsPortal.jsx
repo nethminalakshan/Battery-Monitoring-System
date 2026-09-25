@@ -200,7 +200,7 @@ export default function PreviousLogsPortal({
                     <span style={{ fontSize: '0.8rem' }}>
                       {isDbConnected
                         ? 'Click "Seed Sample Logs" above to populate realistic data to your MongoDB database.'
-                        : 'Connect your MongoDB Atlas cluster in Settings to persist sensor logs.'}
+                        : 'Check the MongoDB URI in server/.env and restart the backend to persist sensor logs.'}
                     </span>
                   </div>
                 </td>

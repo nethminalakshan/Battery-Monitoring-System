@@ -192,6 +192,7 @@ TaReading pollTaModule(SoftwareSerial &link, byte addr) {
   link.write(TA_REQ_HEADER);
   link.write(addr);
   link.write((byte)CMD_READ_ALL);
+  link.flush();  // Ensure the complete request has left the TC before waiting.
 
   unsigned long start = millis();
   byte resp[15];
