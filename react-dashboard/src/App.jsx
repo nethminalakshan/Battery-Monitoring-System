@@ -9,7 +9,7 @@ import LiveLogsConsole from './components/LiveLogsConsole';
 import { Zap, ShieldAlert, Sparkles, Database, RefreshCw } from 'lucide-react';
 import './App.css';
 
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/+$/, '');
 const BROKER_WS = 'wss://broker.hivemq.com:8884/mqtt';
 
 export default function App() {

@@ -349,6 +349,23 @@ npm start
 ```
 The server will boot on `http://localhost:5000` and automatically connect to MongoDB Atlas and the HiveMQ broker.
 
+### Vercel deployment
+
+Deploy the `server/` directory as a separate Vercel project. In the server Vercel
+project, add `MONGODB_URI` under **Settings > Environment Variables** for the
+Production environment. Do not commit or upload `server/.env`.
+
+Deploy `react-dashboard/` as the frontend Vercel project and add
+`VITE_API_BASE_URL` with the deployed server URL, for example:
+
+```text
+https://your-server-project.vercel.app/api
+```
+
+Also add the Vercel server's outbound access in MongoDB Atlas Network Access
+(using `0.0.0.0/0` if a fixed Vercel IP range is not available). Redeploy both
+projects after changing environment variables.
+
 ### Step 3: Start the React Application
 In a new terminal window:
 ```bash

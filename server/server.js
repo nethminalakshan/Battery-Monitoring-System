@@ -33,16 +33,20 @@ app.get('/', (req, res) => {
   });
 });
 
-// Start server
-app.listen(PORT, async () => {
+export { app };
+
+// Start server when running locally, but not when imported by a serverless function.
+if (process.env.VERCEL !== '1') {
+  app.listen(PORT, async () => {
   console.log(`====================================================`);
   console.log(`RMS Battery Monitoring Server running on port ${PORT}`);
   console.log(`Health endpoint: http://localhost:${PORT}/api/health`);
   console.log(`====================================================`);
 
-  // Attempt connection to MongoDB Atlas
-  await connectDB();
+    // Attempt connection to MongoDB Atlas
+    await connectDB();
 
-  // Initialize MQTT ingestion
-  initMqtt();
-});
+    // Initialize MQTT ingestion
+    initMqtt();
+  });
+}

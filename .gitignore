@@ -1,0 +1,5 @@
+server/.env
+react-dashboard/.env
+react-dashboard/.env.local
+node_modules/
+dist/

@@ -3,11 +3,13 @@ import dotenv from 'dotenv';
 import dns from 'node:dns';
 dotenv.config();
 
-// Fix for Windows / ISP DNS blocking querySrv for MongoDB Atlas
-try {
-  dns.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4']);
-} catch {
-  // Ignore if not permitted
+// This is a Windows/ISP workaround; Vercel should use its platform DNS.
+if (process.platform === 'win32') {
+  try {
+    dns.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4']);
+  } catch {
+    // Ignore if not permitted
+  }
 }
 
 let connectionStatus = {
