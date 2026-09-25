@@ -49,6 +49,11 @@ export default function App() {
   const [isSeeding, setIsSeeding] = useState(false);
 
   const mqttClientRef = useRef(null);
+  const lastSeenRef = useRef({
+    cm: 0,
+    ta1: 0,
+    ta2: 0
+  });
 
   // Add a line to live console
   const addLiveLog = useCallback((msg, type = 'info') => {
@@ -65,7 +70,16 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setDbStatus(data.database || {});
-        if (data.telemetry?.status) setStatusChips(data.telemetry.status);
+
+        // Only adopt backend status chips if direct MQTT telemetry hasn't been received recently
+        const now = Date.now();
+        const hasDirectMqttTelemetry = lastSeenRef.current.cm > 0 && (now - lastSeenRef.current.cm < 15000);
+        if (!hasDirectMqttTelemetry && data.telemetry?.status) {
+          setStatusChips(prev => ({
+            ...prev,
+            ...data.telemetry.status
+          }));
+        }
       }
     } catch {
       // Backend might be offline or starting up
@@ -189,44 +203,71 @@ export default function App() {
       const valStr = payload.toString().trim();
       const num = parseFloat(valStr);
 
+      // Any message from ESP8266 CM proves CM is online
+      lastSeenRef.current.cm = Date.now();
+
       switch (topic) {
         case 'rms/battery/1/voltage':
+          lastSeenRef.current.ta1 = Date.now();
           if (!isNaN(num)) {
             setBat1(prev => ({ ...prev, volt: num }));
             addLiveLog(`[Bat1 Volt] ${num.toFixed(2)} V`, 'info');
           }
+          setStatusChips(prev => ({ ...prev, online: true, ta1: true }));
           break;
         case 'rms/battery/1/temperature':
+          lastSeenRef.current.ta1 = Date.now();
           if (!isNaN(num)) setBat1(prev => ({ ...prev, temp: num }));
+          setStatusChips(prev => ({ ...prev, online: true, ta1: true }));
           break;
         case 'rms/battery/1/ir':
+          lastSeenRef.current.ta1 = Date.now();
           if (!isNaN(num)) setBat1(prev => ({ ...prev, ir: num }));
+          setStatusChips(prev => ({ ...prev, online: true, ta1: true }));
           break;
 
         case 'rms/battery/2/voltage':
+          lastSeenRef.current.ta2 = Date.now();
           if (!isNaN(num)) {
             setBat2(prev => ({ ...prev, volt: num }));
             addLiveLog(`[Bat2 Volt] ${num.toFixed(2)} V`, 'info');
           }
+          setStatusChips(prev => ({ ...prev, online: true, ta2: true }));
           break;
         case 'rms/battery/2/temperature':
+          lastSeenRef.current.ta2 = Date.now();
           if (!isNaN(num)) setBat2(prev => ({ ...prev, temp: num }));
+          setStatusChips(prev => ({ ...prev, online: true, ta2: true }));
           break;
         case 'rms/battery/2/ir':
+          lastSeenRef.current.ta2 = Date.now();
           if (!isNaN(num)) setBat2(prev => ({ ...prev, ir: num }));
+          setStatusChips(prev => ({ ...prev, online: true, ta2: true }));
           break;
 
         case 'rms/system/current':
           if (!isNaN(num)) setSystemCurrent(num);
+          setStatusChips(prev => ({ ...prev, online: true }));
           break;
         case 'rms/system/temperature':
           if (!isNaN(num)) setAmbientTemp(num);
+          setStatusChips(prev => ({ ...prev, online: true }));
           break;
 
         case 'rms/status':
           try {
             const s = JSON.parse(valStr);
-            setStatusChips(s);
+            if (s.online) lastSeenRef.current.cm = Date.now();
+            if (s.ta1) lastSeenRef.current.ta1 = Date.now();
+            if (s.ta2) lastSeenRef.current.ta2 = Date.now();
+
+            setStatusChips(prev => ({
+              ...prev,
+              online: s.online !== undefined ? s.online : prev.online,
+              ta1: s.ta1 !== undefined ? s.ta1 : prev.ta1,
+              ta2: s.ta2 !== undefined ? s.ta2 : prev.ta2,
+              tc_error: s.tc_error !== undefined ? s.tc_error : false
+            }));
             if (s.tc_error) addLiveLog('Alert: TC Module not responding!', 'err');
           } catch {
             // Ignore parse errors
@@ -239,6 +280,41 @@ export default function App() {
       if (client) client.end();
     };
   }, [addLiveLog]);
+
+  // Dynamic watchdog timer to evaluate STREAMING vs IDLE / ONLINE vs OFFLINE
+  // Smoothly bridges the 5s hardware polling interval with a 15s debounce window
+  useEffect(() => {
+    const watchdog = setInterval(() => {
+      const now = Date.now();
+      const TIMEOUT_MS = 15000; // 15 seconds window (hardware transmits every 5s)
+      
+      const cmActive = lastSeenRef.current.cm > 0 && (now - lastSeenRef.current.cm < TIMEOUT_MS);
+      const ta1Active = lastSeenRef.current.ta1 > 0 && (now - lastSeenRef.current.ta1 < TIMEOUT_MS);
+      const ta2Active = lastSeenRef.current.ta2 > 0 && (now - lastSeenRef.current.ta2 < TIMEOUT_MS);
+
+      setStatusChips(prev => {
+        const nextOnline = cmActive || prev.online;
+        const nextTa1 = ta1Active;
+        const nextTa2 = ta2Active;
+
+        if (
+          prev.online !== nextOnline ||
+          prev.ta1 !== nextTa1 ||
+          prev.ta2 !== nextTa2
+        ) {
+          return {
+            ...prev,
+            online: nextOnline,
+            ta1: nextTa1,
+            ta2: nextTa2
+          };
+        }
+        return prev;
+      });
+    }, 2000);
+
+    return () => clearInterval(watchdog);
+  }, []);
 
   // Periodic polling for DB and historical data
   useEffect(() => {

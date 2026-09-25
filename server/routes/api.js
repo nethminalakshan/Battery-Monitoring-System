@@ -9,16 +9,29 @@ const router = express.Router();
 
 // 1. Health & Connection Status
 router.get('/health', (req, res) => {
+  const now = Date.now();
+  const TIMEOUT_MS = 15000;
+  const bat1Active = state.bat1.updatedAt ? (now - new Date(state.bat1.updatedAt).getTime() < TIMEOUT_MS) : false;
+  const bat2Active = state.bat2.updatedAt ? (now - new Date(state.bat2.updatedAt).getTime() < TIMEOUT_MS) : false;
+  const mqttStat = getMqttStatus();
+  const lastMsgTime = mqttStat.lastMessageAt ? new Date(mqttStat.lastMessageAt).getTime() : 0;
+  const cmOnline = (now - lastMsgTime < TIMEOUT_MS) || state.status.online;
+
   res.json({
     ok: true,
     timestamp: new Date().toISOString(),
     database: getDbStatus(),
-    mqtt: getMqttStatus(),
+    mqtt: mqttStat,
     telemetry: {
       bat1: state.bat1,
       bat2: state.bat2,
       system: state.system,
-      status: state.status
+      status: {
+        ...state.status,
+        online: cmOnline,
+        ta1: bat1Active || state.status.ta1,
+        ta2: bat2Active || state.status.ta2
+      }
     }
   });
 });

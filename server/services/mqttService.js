@@ -127,36 +127,45 @@ export function initMqtt() {
     const str = payload.toString().trim();
     const num = parseFloat(str);
 
+    // Any incoming message from CM marks ESP8266 CM online
+    state.status.online = true;
+
     switch (topic) {
       case 'rms/battery/1/voltage':
         state.bat1.volt = isNaN(num) ? 0 : num;
         state.bat1.updatedAt = new Date().toISOString();
+        state.status.ta1 = true;
         maybeSaveBatteryLog(1);
         break;
       case 'rms/battery/1/temperature':
         state.bat1.temp = isNaN(num) ? 0 : num;
         state.bat1.updatedAt = new Date().toISOString();
+        state.status.ta1 = true;
         maybeSaveBatteryLog(1);
         break;
       case 'rms/battery/1/ir':
         state.bat1.ir = isNaN(num) ? 0 : num;
         state.bat1.updatedAt = new Date().toISOString();
+        state.status.ta1 = true;
         maybeSaveBatteryLog(1);
         break;
 
       case 'rms/battery/2/voltage':
         state.bat2.volt = isNaN(num) ? 0 : num;
         state.bat2.updatedAt = new Date().toISOString();
+        state.status.ta2 = true;
         maybeSaveBatteryLog(2);
         break;
       case 'rms/battery/2/temperature':
         state.bat2.temp = isNaN(num) ? 0 : num;
         state.bat2.updatedAt = new Date().toISOString();
+        state.status.ta2 = true;
         maybeSaveBatteryLog(2);
         break;
       case 'rms/battery/2/ir':
         state.bat2.ir = isNaN(num) ? 0 : num;
         state.bat2.updatedAt = new Date().toISOString();
+        state.status.ta2 = true;
         maybeSaveBatteryLog(2);
         break;
 
@@ -172,7 +181,13 @@ export function initMqtt() {
       case 'rms/status':
         try {
           const parsed = JSON.parse(str);
-          state.status = { ...state.status, ...parsed };
+          state.status = {
+            ...state.status,
+            online: parsed.online !== undefined ? parsed.online : state.status.online,
+            ta1: parsed.ta1 !== undefined ? parsed.ta1 : state.status.ta1,
+            ta2: parsed.ta2 !== undefined ? parsed.ta2 : state.status.ta2,
+            tc_error: parsed.tc_error !== undefined ? parsed.tc_error : false
+          };
 
           if (parsed.tc_error && mongoose.connection.readyState === 1) {
             SystemEvent.create({

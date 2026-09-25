@@ -212,14 +212,14 @@
 /* System Status Ribbon */
 .status-ribbon {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 12px;
   width: 100%;
 }
 
 @media (max-width: 480px) {
   .status-ribbon {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: 1fr;
     gap: 8px;
   }
 }
@@ -228,10 +228,11 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 16px;
+  padding: 10px 14px;
   background: rgba(15, 23, 42, 0.6);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
+  gap: 8px;
 }
 
 .chip-label {
@@ -240,6 +241,7 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .chip-value {
@@ -249,6 +251,8 @@
   font-size: 0.82rem;
   font-weight: 700;
   font-family: var(--font-mono);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 /* Battery Cards Grid */

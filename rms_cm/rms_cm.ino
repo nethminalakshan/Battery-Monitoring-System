@@ -50,8 +50,8 @@
 // ============================================================
 //  USER CONFIGURATION  --  edit these before flashing
 // ============================================================
-const char* WIFI_SSID      = "Nethmina's Galaxy A53 5G";
-const char* WIFI_PASSWORD  = "12345678";
+const char* WIFI_SSID      = "Redmi 13C";
+const char* WIFI_PASSWORD  = "00000000";
 
 // MQTT broker - broker.hivemq.com for quick testing,
 // or your local Mosquitto IP e.g. "192.168.1.100"
@@ -109,10 +109,9 @@ void connectWiFi() {
 // ---- MQTT connect (blocking with retry) --------------------
 void connectMQTT() {
   while (!mqtt.connected()) {
-    Serial.print("[CM] Connecting MQTT...");
     if (mqtt.connect(MQTT_CLIENT_ID)) {
       Serial.println(" connected.");
-      mqtt.publish("rms/status", "{\"online\":true}", true);
+      mqtt.publish("rms/status", "{\"online\":true,\"ta1\":false,\"ta2\":false,\"tc_error\":false}", false);
     } else {
       Serial.print(" failed rc=");
       Serial.print(mqtt.state());
@@ -270,16 +269,16 @@ void loop() {
       publishFloat("rms/system/current",     cur, 3);
       publishFloat("rms/system/temperature", amb, 1);
 
-      char statusJson[96];
+      char statusJson[128];
       snprintf(statusJson, sizeof(statusJson),
-               "{\"ta1\":%s,\"ta2\":%s,\"current\":%.3f,\"online\":true,\"uptime\":%lu}",
+               "{\"ta1\":%s,\"ta2\":%s,\"tc_error\":false,\"current\":%.3f,\"online\":true,\"uptime\":%lu}",
                ta1ok ? "true" : "false",
                ta2ok ? "true" : "false",
                cur,
                millis() / 1000UL);
-      mqtt.publish("rms/status", statusJson, true);
+      mqtt.publish("rms/status", statusJson, false);
     } else {
-      mqtt.publish("rms/status", "{\"tc_error\":true,\"online\":true}", true);
+      mqtt.publish("rms/status", "{\"tc_error\":true,\"online\":true}", false);
     }
   }
 }
