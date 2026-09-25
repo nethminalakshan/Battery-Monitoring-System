@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "installCommand": "npm --prefix server ci && npm --prefix react-dashboard ci",
+  "installCommand": "npm install && npm --prefix server install && npm --prefix react-dashboard install",
   "buildCommand": "npm --prefix react-dashboard run build",
   "outputDirectory": "react-dashboard/dist",
   "rewrites": [

@@ -1,5 +1,4 @@
-server/.env
-react-dashboard/.env
-react-dashboard/.env.local
+# server/.env is included per user request to auto-connect database upon GitHub push & deploy
 node_modules/
 dist/
+react-dashboard/.env.local
