@@ -270,6 +270,10 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ uri })
       });
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        throw new Error(`API endpoint unavailable (${res.status}). Redeploy the Vercel project from the repository root.`);
+      }
       const data = await res.json();
       if (res.ok && data.success) {
         setDbStatus(data.status);

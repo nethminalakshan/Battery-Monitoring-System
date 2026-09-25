@@ -351,18 +351,12 @@ The server will boot on `http://localhost:5000` and automatically connect to Mon
 
 ### Vercel deployment
 
-Deploy the `server/` directory as a separate Vercel project. In the server Vercel
-project, add `MONGODB_URI` under **Settings > Environment Variables** for the
-Production environment. Do not commit or upload `server/.env`.
+Deploy the repository root as one Vercel project. The root `vercel.json`
+builds `react-dashboard/` and exposes `server/api/index.js` under `/api/*`.
+In the Vercel project, add `MONGODB_URI` under **Settings > Environment
+Variables** for the Production environment. Do not commit or upload `server/.env`.
 
-Deploy `react-dashboard/` as the frontend Vercel project and add
-`VITE_API_BASE_URL` with the deployed server URL, for example:
-
-```text
-https://your-server-project.vercel.app/api
-```
-
-Also add the Vercel server's outbound access in MongoDB Atlas Network Access
+Also add Vercel's outbound access in MongoDB Atlas Network Access
 (using `0.0.0.0/0` if a fixed Vercel IP range is not available). Redeploy both
 projects after changing environment variables.
 
