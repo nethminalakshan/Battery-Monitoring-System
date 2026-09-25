@@ -352,7 +352,7 @@ The server will boot on `http://localhost:5000` and automatically connect to Mon
 ### Vercel deployment
 
 Deploy the repository root as one Vercel project. The root `vercel.json`
-builds `react-dashboard/` and exposes `server/api/index.js` under `/api/*`.
+builds `react-dashboard/` and exposes `api/index.js` under `/api/*`.
 In the Vercel project, add `MONGODB_URI` under **Settings > Environment
 Variables** for the Production environment. Do not commit or upload `server/.env`.
 
