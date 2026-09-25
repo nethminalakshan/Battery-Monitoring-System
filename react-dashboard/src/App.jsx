@@ -5,6 +5,7 @@ import BatteryCard from './components/BatteryCard';
 import SystemOverview from './components/SystemOverview';
 import AnalyticsCharts from './components/AnalyticsCharts';
 import PreviousLogsPortal from './components/PreviousLogsPortal';
+import MongoConfigModal from './components/MongoConfigModal';
 import LiveLogsConsole from './components/LiveLogsConsole';
 import { Zap, ShieldAlert, Sparkles, Database, RefreshCw } from 'lucide-react';
 import './App.css';
@@ -42,7 +43,9 @@ export default function App() {
   const [logFilters, setLogFilters] = useState({ batteryId: '', level: '' });
   const [isLogsLoading, setIsLogsLoading] = useState(false);
 
-  // Actions
+  // Modals & Actions
+  const [isMongoModalOpen, setIsMongoModalOpen] = useState(false);
+  const [isTestingMongo, setIsTestingMongo] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
 
   const mqttClientRef = useRef(null);
@@ -259,6 +262,28 @@ export default function App() {
     fetchHistoricalAnalytics(newTf);
   };
 
+  const handleUpdateMongoUri = async (uri) => {
+    setIsTestingMongo(true);
+    try {
+      const res = await fetch(`${API_BASE}/config/mongo-uri`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uri })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setDbStatus(data.status);
+        await refreshAll();
+        return { success: true };
+      }
+      return { success: false, error: data.message || 'Connection failed' };
+    } catch (err) {
+      return { success: false, error: err.message };
+    } finally {
+      setIsTestingMongo(false);
+    }
+  };
+
   const handleSeedData = async () => {
     setIsSeeding(true);
     try {
@@ -290,6 +315,7 @@ export default function App() {
         dbStatus={dbStatus}
         mqttStatus={mqttStatus}
         statusChips={statusChips}
+        onOpenMongoModal={() => setIsMongoModalOpen(true)}
         onRefreshData={refreshAll}
         isRefreshing={isRefreshing}
       />
@@ -378,6 +404,15 @@ export default function App() {
         )}
       </main>
 
+      <MongoConfigModal
+        isOpen={isMongoModalOpen}
+        onClose={() => setIsMongoModalOpen(false)}
+        dbStatus={dbStatus}
+        onUpdateUri={handleUpdateMongoUri}
+        onSeedData={handleSeedData}
+        isTesting={isTestingMongo}
+        isSeeding={isSeeding}
+      />
     </div>
   );
 }

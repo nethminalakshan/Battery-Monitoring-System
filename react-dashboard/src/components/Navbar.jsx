@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, Database, Radio, Cpu, BarChart3, ListFilter, RefreshCw, Zap } from 'lucide-react';
+import { Activity, Database, Radio, Cpu, BarChart3, ListFilter, Settings, RefreshCw, Zap } from 'lucide-react';
 
 export default function Navbar({
   activeTab,
@@ -7,6 +7,7 @@ export default function Navbar({
   dbStatus,
   mqttStatus,
   statusChips,
+  onOpenMongoModal,
   onRefreshData,
   isRefreshing
 }) {
@@ -53,16 +54,17 @@ export default function Navbar({
 
       <div className="nav-chips">
         {/* MongoDB Atlas Status */}
-        <div
+        <button
+          onClick={onOpenMongoModal}
           className={`badge cursor-pointer transition-all ${
             isMongoConnected ? 'badge-ok' : 'badge-alert'
           }`}
-          title="MongoDB connection is configured by the server environment"
+          title="Configure MongoDB connection"
         >
           <Database size={13} />
           <span>{isMongoConnected ? 'MongoDB Atlas' : 'DB Disconnected'}</span>
           <span className={`pulse-dot ${isMongoConnected ? 'ok' : 'err'}`} />
-        </div>
+        </button>
 
         {/* MQTT Status */}
         <div
@@ -93,6 +95,15 @@ export default function Navbar({
           disabled={isRefreshing}
         >
           <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
+        </button>
+
+        <button
+          className="btn-secondary"
+          style={{ padding: '6px 12px' }}
+          onClick={onOpenMongoModal}
+          title="Database & Connection Settings"
+        >
+          <Settings size={14} />
         </button>
 
       </div>

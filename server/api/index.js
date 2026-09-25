@@ -4,17 +4,15 @@ import { connectDB } from '../config/db.js';
 let connectionPromise;
 
 export default async function handler(req, res) {
-  if (!connectionPromise) {
+  if (process.env.MONGODB_URI && !connectionPromise) {
     connectionPromise = connectDB();
   }
 
-  const connected = await connectionPromise;
-  if (!connected) {
-    connectionPromise = undefined;
-    return res.status(503).json({
-      ok: false,
-      error: 'MongoDB connection failed. Check the MONGODB_URI Vercel environment variable and MongoDB Atlas network access.'
-    });
+  if (connectionPromise) {
+    const connected = await connectionPromise;
+    if (!connected) {
+      connectionPromise = undefined;
+    }
   }
 
   return app(req, res);
