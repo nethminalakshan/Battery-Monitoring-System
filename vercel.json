@@ -3,11 +3,6 @@
   "installCommand": "npm --prefix server ci && npm --prefix react-dashboard ci",
   "buildCommand": "npm --prefix react-dashboard run build",
   "outputDirectory": "react-dashboard/dist",
-  "functions": {
-    "api/index.js": {
-      "runtime": "nodejs20.x"
-    }
-  },
   "rewrites": [
     {
       "source": "/api/:path*",
