@@ -7,6 +7,11 @@ const V_MIN = 10.5;
 const V_LOW = 11.5;
 const V_HIGH = 14.0;
 const V_MAX = 14.4;
+const CURRENT_SENSOR_ZERO_OFFSET = 5.36;
+
+function calibrateCurrent(rawCurrent) {
+  return Math.max(0, rawCurrent - CURRENT_SENSOR_ZERO_OFFSET);
+}
 
 export const state = {
   bat1: { volt: 0, temp: 0, ir: 0, updatedAt: null },
@@ -170,7 +175,7 @@ export function initMqtt() {
         break;
 
       case 'rms/system/current':
-        state.system.current = isNaN(num) ? 0 : num;
+        state.system.current = isNaN(num) ? 0 : calibrateCurrent(num);
         state.system.updatedAt = new Date().toISOString();
         break;
       case 'rms/system/temperature':

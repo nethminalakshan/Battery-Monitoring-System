@@ -12,6 +12,11 @@ import './App.css';
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/+$/, '');
 const BROKER_WS = 'wss://broker.hivemq.com:8884/mqtt';
+const CURRENT_SENSOR_ZERO_OFFSET = 5.36;
+
+function calibrateCurrent(rawCurrent) {
+  return Math.max(0, rawCurrent - CURRENT_SENSOR_ZERO_OFFSET);
+}
 
 export default function App() {
   // Navigation
@@ -249,7 +254,7 @@ export default function App() {
         case 'rms/system/current':
           if (!isNaN(num)) {
             lastSeenRef.current.current = Date.now();
-            setSystemCurrent(num);
+            setSystemCurrent(calibrateCurrent(num));
           }
           setStatusChips(prev => ({ ...prev, online: true }));
           break;
@@ -266,7 +271,7 @@ export default function App() {
             if (s.ta2) lastSeenRef.current.ta2 = Date.now();
             if (Number.isFinite(s.current)) {
               lastSeenRef.current.current = Date.now();
-              setSystemCurrent(s.current);
+              setSystemCurrent(calibrateCurrent(s.current));
             }
 
             setStatusChips(prev => ({
