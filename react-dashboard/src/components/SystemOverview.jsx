@@ -6,14 +6,15 @@ export default function SystemOverview({
   ambientTemp = 0,
   statusChips = {}
 }) {
+  const safeCurrent = Number.isFinite(current) ? current : 0;
   const maxCurrent = 30;
-  const currentFraction = Math.min(Math.max(current / maxCurrent, 0), 1);
+  const currentFraction = Math.min(Math.max(safeCurrent / maxCurrent, 0), 1);
   const strokeDashoffset = 251.2 - currentFraction * 251.2;
 
   // Determine Current State: Discharging or Charging or Idle
   let currentMode = 'Idle';
-  if (current > 0.3) currentMode = 'Load Discharging';
-  else if (current < -0.3) currentMode = 'Charging Input';
+  if (safeCurrent > 0.3) currentMode = 'Load Discharging';
+  else if (safeCurrent < -0.3) currentMode = 'Charging Input';
 
   // Ambient temp percentage (0 to 60 deg C)
   const tempPct = Math.min(Math.max((ambientTemp - 0) / 60, 0), 1) * 100;
@@ -81,7 +82,7 @@ export default function SystemOverview({
           </svg>
 
           <div className="gauge-readout">
-            <div className="gauge-amps">{current > 0 ? current.toFixed(3) : '0.000'}</div>
+            <div className="gauge-amps">{safeCurrent > 0 ? safeCurrent.toFixed(3) : '0.000'}</div>
             <div className="gauge-unit">Total Amperes</div>
           </div>
         </div>

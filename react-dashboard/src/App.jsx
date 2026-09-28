@@ -20,7 +20,7 @@ export default function App() {
   // Live Telemetry State
   const [bat1, setBat1] = useState({ volt: 12.6, temp: 28.4, ir: 18.2 });
   const [bat2, setBat2] = useState({ volt: 12.5, temp: 29.1, ir: 19.4 });
-  const [systemCurrent, setSystemCurrent] = useState(3.42);
+  const [systemCurrent, setSystemCurrent] = useState(0);
   const [ambientTemp, setAmbientTemp] = useState(27.5);
   const [statusChips, setStatusChips] = useState({ online: true, ta1: true, ta2: true, tc_error: false });
 
@@ -52,7 +52,8 @@ export default function App() {
   const lastSeenRef = useRef({
     cm: 0,
     ta1: 0,
-    ta2: 0
+    ta2: 0,
+    current: 0
   });
 
   // Add a line to live console
@@ -246,7 +247,10 @@ export default function App() {
           break;
 
         case 'rms/system/current':
-          if (!isNaN(num)) setSystemCurrent(num);
+          if (!isNaN(num)) {
+            lastSeenRef.current.current = Date.now();
+            setSystemCurrent(num);
+          }
           setStatusChips(prev => ({ ...prev, online: true }));
           break;
         case 'rms/system/temperature':
@@ -260,6 +264,10 @@ export default function App() {
             if (s.online) lastSeenRef.current.cm = Date.now();
             if (s.ta1) lastSeenRef.current.ta1 = Date.now();
             if (s.ta2) lastSeenRef.current.ta2 = Date.now();
+            if (Number.isFinite(s.current)) {
+              lastSeenRef.current.current = Date.now();
+              setSystemCurrent(s.current);
+            }
 
             setStatusChips(prev => ({
               ...prev,
@@ -291,6 +299,11 @@ export default function App() {
       const cmActive = lastSeenRef.current.cm > 0 && (now - lastSeenRef.current.cm < TIMEOUT_MS);
       const ta1Active = lastSeenRef.current.ta1 > 0 && (now - lastSeenRef.current.ta1 < TIMEOUT_MS);
       const ta2Active = lastSeenRef.current.ta2 > 0 && (now - lastSeenRef.current.ta2 < TIMEOUT_MS);
+      const currentActive = lastSeenRef.current.current > 0 && (now - lastSeenRef.current.current < TIMEOUT_MS);
+
+      if (!currentActive) {
+        setSystemCurrent(0);
+      }
 
       setStatusChips(prev => {
         const nextOnline = cmActive || prev.online;
