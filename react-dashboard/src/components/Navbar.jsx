@@ -1,7 +1,7 @@
 import React from 'react';
 import { Activity, Database, Radio, Cpu, BarChart3, ListFilter, Settings, RefreshCw, Zap } from 'lucide-react';
 
-export default function Navbar({
+function NavbarComponent({
   activeTab,
   setActiveTab,
   dbStatus,
@@ -105,8 +105,9 @@ export default function Navbar({
         >
           <Settings size={14} />
         </button>
-
       </div>
     </header>
   );
 }
+
+export default React.memo(NavbarComponent);

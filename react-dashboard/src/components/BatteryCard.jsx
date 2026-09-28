@@ -1,19 +1,20 @@
 import React from 'react';
-import { BatteryCharging, BatteryWarning, Thermometer, Gauge, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { BatteryCharging, ShieldCheck, AlertTriangle } from 'lucide-react';
+import AnimatedNumber from './AnimatedNumber';
 
 const V_MIN = 10.5;
 const V_MAX = 14.4;
 const V_LOW = 11.5;
 const V_HIGH = 14.0;
 
-export default function BatteryCard({
+function BatteryCardComponent({
   batteryId,
   data = { volt: 0, temp: 0, ir: 0 },
   activeChip = false
 }) {
-  const volt = data.volt || 0;
-  const temp = data.temp || 0;
-  const ir = data.ir || 0;
+  const volt = typeof data.volt === 'number' ? data.volt : 0;
+  const temp = typeof data.temp === 'number' ? data.temp : 0;
+  const ir = typeof data.ir === 'number' ? data.ir : 0;
 
   // Calculate percentage based on 12V Lead-Acid nominal operating curve
   const pct = Math.min(Math.max(Math.round(((volt - V_MIN) / (V_MAX - V_MIN)) * 100), 0), 100);
@@ -21,15 +22,18 @@ export default function BatteryCard({
   // Status & Color logic
   let statusText = 'Normal';
   let statusLevel = 'ok';
+  let chargeBarClass = 'charge-normal';
 
   const hasTempSensor = temp > -50 && temp < 150;
 
   if (volt > 0 && volt < V_LOW) {
     statusText = 'Low Voltage';
     statusLevel = 'alert';
+    chargeBarClass = 'charge-alert';
   } else if (volt > V_HIGH) {
     statusText = 'High Voltage / Overcharge';
     statusLevel = 'warn';
+    chargeBarClass = 'charge-warn';
   } else if (hasTempSensor && temp > 45) {
     statusText = 'Overtemp Alert';
     statusLevel = 'alert';
@@ -39,6 +43,7 @@ export default function BatteryCard({
   } else if (volt === 0) {
     statusText = 'Standby / Offline';
     statusLevel = 'warn';
+    chargeBarClass = 'charge-warn';
   }
 
   const isBat2 = batteryId === 2;
@@ -54,7 +59,7 @@ export default function BatteryCard({
           <div>
             <div className="battery-title">BATTERY CELL #{batteryId}</div>
             <div className="battery-subtext">
-              {activeChip ? 'Active Sensor • Module TA' + batteryId : 'Sensors Listening...'}
+              {activeChip ? `Active Sensor • Module TA${batteryId}` : 'Sensors Listening...'}
             </div>
           </div>
         </div>
@@ -73,23 +78,17 @@ export default function BatteryCard({
       <div className="charge-visualizer">
         <div className="charge-info">
           <span style={{ color: 'var(--text-secondary)' }}>State of Charge (SoC)</span>
-          <span className="font-mono" style={{ color: 'var(--cyan-core)' }}>
-            {pct}%
+          <span className="font-mono" style={{ color: isBat2 ? '#c084fc' : 'var(--cyan-core)' }}>
+            <AnimatedNumber value={pct} decimals={0} duration={500} suffix="%" />
           </span>
         </div>
         <div className="charge-bar-track">
           <div
-            className="charge-bar-fill"
-            style={{
-              width: `${pct}%`,
-              backgroundColor:
-                volt < V_LOW
-                  ? 'var(--rose-core)'
-                  : volt > V_HIGH
-                  ? 'var(--amber-core)'
-                  : undefined
-            }}
-          />
+            className={`charge-bar-fill ${chargeBarClass}`}
+            style={{ width: `${pct}%` }}
+          >
+            <div className="charge-bar-sheen" />
+          </div>
         </div>
       </div>
 
@@ -104,7 +103,12 @@ export default function BatteryCard({
                 volt < V_LOW ? 'alert' : volt > V_HIGH ? 'warn' : 'normal'
               }`}
             >
-              {volt > 0 ? volt.toFixed(2) : '0.00'}
+              <AnimatedNumber
+                value={volt}
+                decimals={2}
+                duration={450}
+                fallback="0.00"
+              />
             </span>
             <span className="metric-unit">V</span>
           </div>
@@ -119,7 +123,16 @@ export default function BatteryCard({
                 hasTempSensor && temp > 45 ? 'alert' : hasTempSensor && temp > 35 ? 'warn' : ''
               }`}
             >
-              {hasTempSensor ? temp.toFixed(1) : 'N/A'}
+              {hasTempSensor ? (
+                <AnimatedNumber
+                  value={temp}
+                  decimals={1}
+                  duration={450}
+                  fallback="N/A"
+                />
+              ) : (
+                'N/A'
+              )}
             </span>
             <span className="metric-unit">{hasTempSensor ? '°C' : ''}</span>
           </div>
@@ -130,7 +143,12 @@ export default function BatteryCard({
           <span className="metric-label">Internal Resist.</span>
           <div className="metric-value-wrap">
             <span className="metric-number" style={{ color: '#a78bfa' }}>
-              {ir > 0 ? ir.toFixed(1) : '0.0'}
+              <AnimatedNumber
+                value={ir}
+                decimals={1}
+                duration={450}
+                fallback="0.0"
+              />
             </span>
             <span className="metric-unit">mΩ</span>
           </div>
@@ -139,3 +157,16 @@ export default function BatteryCard({
     </div>
   );
 }
+
+// React.memo with customized shallow check to prevent re-renders when other un-related state changes
+function areEqual(prevProps, nextProps) {
+  return (
+    prevProps.batteryId === nextProps.batteryId &&
+    prevProps.activeChip === nextProps.activeChip &&
+    prevProps.data?.volt === nextProps.data?.volt &&
+    prevProps.data?.temp === nextProps.data?.temp &&
+    prevProps.data?.ir === nextProps.data?.ir
+  );
+}
+
+export default React.memo(BatteryCardComponent, areEqual);

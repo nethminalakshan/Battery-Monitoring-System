@@ -1,22 +1,39 @@
 import React from 'react';
-import { Gauge, Thermometer, Zap, AlertCircle, Cpu, Wifi } from 'lucide-react';
+import { Zap, Thermometer } from 'lucide-react';
+import AnimatedNumber, { useAnimatedNumber } from './AnimatedNumber';
 
-export default function SystemOverview({
+function SystemOverviewComponent({
   current = 0,
   ambientTemp = 0,
   statusChips = {}
 }) {
   const maxCurrent = 30;
-  const currentFraction = Math.min(Math.max(current / maxCurrent, 0), 1);
+
+  // Smoothly animated float values for 60fps gauge movement
+  const animatedCurrentStr = useAnimatedNumber(current, { duration: 450, decimals: 3 });
+  const animatedCurrentNum = parseFloat(animatedCurrentStr) || 0;
+
+  const animatedTempStr = useAnimatedNumber(ambientTemp, { duration: 450, decimals: 1 });
+  const animatedTempNum = parseFloat(animatedTempStr) || 0;
+
+  // Calculate arc fraction based on absolute current magnitude up to maxCurrent
+  const currentMagnitude = Math.abs(animatedCurrentNum);
+  const currentFraction = Math.min(Math.max(currentMagnitude / maxCurrent, 0), 1);
   const strokeDashoffset = 251.2 - currentFraction * 251.2;
 
-  // Determine Current State: Discharging or Charging or Idle
+  // Determine Current State: Discharging vs Charging vs Idle
   let currentMode = 'Idle';
-  if (current > 0.3) currentMode = 'Load Discharging';
-  else if (current < -0.3) currentMode = 'Charging Input';
+  let badgeClass = 'badge-cyan';
+  if (current > 0.3) {
+    currentMode = 'Load Discharging';
+    badgeClass = 'badge-cyan';
+  } else if (current < -0.3) {
+    currentMode = 'Charging Input';
+    badgeClass = 'badge-ok';
+  }
 
   // Ambient temp percentage (0 to 60 deg C)
-  const tempPct = Math.min(Math.max((ambientTemp - 0) / 60, 0), 1) * 100;
+  const tempPct = Math.min(Math.max(animatedTempNum / 60, 0), 1) * 100;
 
   return (
     <div className="overview-grid">
@@ -29,7 +46,7 @@ export default function SystemOverview({
               SYSTEM CURRENT FLOW
             </span>
           </div>
-          <span className="badge badge-cyan">
+          <span className={`badge ${badgeClass}`}>
             {currentMode}
           </span>
         </div>
@@ -60,7 +77,7 @@ export default function SystemOverview({
               strokeLinecap="round"
             />
 
-            {/* Animated Dynamic Value Arc */}
+            {/* Animated Dynamic Value Arc driven by 60fps RAF interpolation */}
             <path
               d="M 20 100 A 80 80 0 0 1 180 100"
               fill="none"
@@ -70,7 +87,7 @@ export default function SystemOverview({
               strokeDasharray="251.2"
               strokeDashoffset={strokeDashoffset}
               filter="url(#gaugeGlow)"
-              style={{ transition: 'stroke-dashoffset 0.6s ease' }}
+              style={{ transition: 'stroke-dashoffset 0.15s linear' }}
             />
 
             {/* Scale Labels */}
@@ -81,7 +98,9 @@ export default function SystemOverview({
           </svg>
 
           <div className="gauge-readout">
-            <div className="gauge-amps">{current > 0 ? current.toFixed(3) : '0.000'}</div>
+            <div className="gauge-amps">
+              <AnimatedNumber value={current} decimals={3} duration={450} fallback="0.000" />
+            </div>
             <div className="gauge-unit">Total Amperes</div>
           </div>
         </div>
@@ -96,7 +115,7 @@ export default function SystemOverview({
               <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>AMBIENT THERMALS</span>
             </div>
             <span className="badge badge-warn font-mono">
-              {ambientTemp > 0 ? ambientTemp.toFixed(1) : '0.0'} °C
+              <AnimatedNumber value={ambientTemp} decimals={1} duration={450} fallback="0.0" suffix=" °C" />
             </span>
           </div>
 
@@ -113,7 +132,7 @@ export default function SystemOverview({
                   borderRadius: 4,
                   background: 'linear-gradient(90deg, #3b82f6 0%, #f59e0b 60%, #f43f5e 100%)',
                   boxShadow: '0 0 10px rgba(245, 158, 11, 0.4)',
-                  transition: 'width 0.5s ease'
+                  transition: 'width 0.3s ease-out'
                 }}
               />
             </div>
@@ -147,3 +166,14 @@ export default function SystemOverview({
     </div>
   );
 }
+
+function areOverviewEqual(prev, next) {
+  return (
+    prev.current === next.current &&
+    prev.ambientTemp === next.ambientTemp &&
+    prev.statusChips?.tc_error === next.statusChips?.tc_error &&
+    prev.statusChips?.online === next.statusChips?.online
+  );
+}
+
+export default React.memo(SystemOverviewComponent, areOverviewEqual);

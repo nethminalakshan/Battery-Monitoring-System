@@ -53,7 +53,7 @@ const CustomTooltip = ({ active, payload, label }) => {
   return null;
 };
 
-export default function AnalyticsCharts({
+function AnalyticsChartsComponent({
   historicalData = [],
   timeframe = '24h',
   onTimeframeChange
