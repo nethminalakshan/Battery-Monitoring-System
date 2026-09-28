@@ -140,11 +140,7 @@ router.get('/stats/history', async (req, res) => {
     const selectedTimeframe = timeframes[timeframe] || timeframes['24h'];
     let query = {};
     if (timeframe !== 'all') {
-      const latestLog = await BatteryLog.findOne()
-        .sort({ timestamp: -1 })
-        .select({ timestamp: 1 })
-        .lean();
-      const endTime = latestLog?.timestamp ? new Date(latestLog.timestamp) : new Date();
+      const endTime = new Date();
       query = {
         timestamp: {
           $gte: new Date(endTime.getTime() - selectedTimeframe.durationMs),

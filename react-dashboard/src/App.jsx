@@ -323,6 +323,17 @@ export default function App() {
     }
   }, [activeTab, currentPage, logFilters]);
 
+  // Keep the selected analytics window aligned with the current time.
+  useEffect(() => {
+    if (activeTab !== 'charts') return undefined;
+
+    const interval = setInterval(() => {
+      fetchHistoricalAnalytics(timeframe);
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [activeTab, timeframe]);
+
   // When timeframe changes, update charts
   const handleTimeframeChange = (newTf) => {
     setTimeframe(newTf);
