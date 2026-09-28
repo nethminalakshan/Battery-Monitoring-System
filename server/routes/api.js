@@ -129,6 +129,8 @@ router.get('/stats/history', async (req, res) => {
     const { timeframe = '24h' } = req.query;
 
     const timeframes = {
+      '1m': { durationMs: 1 * 60 * 1000, stepMs: 1000 },
+      '5m': { durationMs: 5 * 60 * 1000, stepMs: 5000 },
       '1h': { durationMs: 1 * 60 * 60 * 1000, stepMs: 5000 },
       '6h': { durationMs: 6 * 60 * 60 * 1000, stepMs: 30000 },
       '24h': { durationMs: 24 * 60 * 60 * 1000, stepMs: 60000 },
@@ -136,9 +138,20 @@ router.get('/stats/history', async (req, res) => {
       '30d': { durationMs: 30 * 24 * 60 * 60 * 1000, stepMs: 900000 }
     };
     const selectedTimeframe = timeframes[timeframe] || timeframes['24h'];
-    const query = timeframe === 'all'
-      ? {}
-      : { timestamp: { $gte: new Date(Date.now() - selectedTimeframe.durationMs) } };
+    let query = {};
+    if (timeframe !== 'all') {
+      const latestLog = await BatteryLog.findOne()
+        .sort({ timestamp: -1 })
+        .select({ timestamp: 1 })
+        .lean();
+      const endTime = latestLog?.timestamp ? new Date(latestLog.timestamp) : new Date();
+      query = {
+        timestamp: {
+          $gte: new Date(endTime.getTime() - selectedTimeframe.durationMs),
+          $lte: endTime
+        }
+      };
+    }
 
     const logs = await BatteryLog.find(query)
       .sort({ timestamp: 1 })

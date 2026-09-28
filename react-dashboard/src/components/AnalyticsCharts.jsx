@@ -110,7 +110,7 @@ export default function AnalyticsCharts({
 
         {/* Timeframe Selector Pills */}
         <div style={{ display: 'flex', gap: 6, background: 'rgba(15, 23, 42, 0.8)', padding: 4, borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
-          {['1h', '6h', '24h', '7d', '30d', 'all'].map(tf => (
+          {['1m', '5m', '1h', '6h', '24h', '7d', '30d', 'all'].map(tf => (
             <button
               key={tf}
               onClick={() => onTimeframeChange && onTimeframeChange(tf)}
@@ -118,7 +118,7 @@ export default function AnalyticsCharts({
                 background: timeframe === tf ? 'linear-gradient(135deg, #06b6d4, #2563eb)' : 'transparent',
                 color: timeframe === tf ? '#ffffff' : 'var(--text-secondary)',
                 border: 'none',
-                padding: '5px 12px',
+                padding: '5px 9px',
                 borderRadius: 6,
                 fontSize: '0.75rem',
                 fontWeight: 600,
