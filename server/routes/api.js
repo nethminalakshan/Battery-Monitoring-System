@@ -128,16 +128,19 @@ router.get('/stats/history', async (req, res) => {
 
     const { timeframe = '24h' } = req.query;
 
-    let timeAgo = 24 * 60 * 60 * 1000;
-    if (timeframe === '1h') timeAgo = 1 * 60 * 60 * 1000;
-    if (timeframe === '6h') timeAgo = 6 * 60 * 60 * 1000;
-    if (timeframe === '7d') timeAgo = 7 * 24 * 60 * 60 * 1000;
-    if (timeframe === '30d') timeAgo = 30 * 24 * 60 * 60 * 1000;
-    if (timeframe === 'all') timeAgo = 365 * 24 * 60 * 60 * 1000;
+    const timeframes = {
+      '1h': { durationMs: 1 * 60 * 60 * 1000, stepMs: 5000 },
+      '6h': { durationMs: 6 * 60 * 60 * 1000, stepMs: 30000 },
+      '24h': { durationMs: 24 * 60 * 60 * 1000, stepMs: 60000 },
+      '7d': { durationMs: 7 * 24 * 60 * 60 * 1000, stepMs: 300000 },
+      '30d': { durationMs: 30 * 24 * 60 * 60 * 1000, stepMs: 900000 }
+    };
+    const selectedTimeframe = timeframes[timeframe] || timeframes['24h'];
+    const query = timeframe === 'all'
+      ? {}
+      : { timestamp: { $gte: new Date(Date.now() - selectedTimeframe.durationMs) } };
 
-    const cutoff = new Date(Date.now() - timeAgo);
-
-    const logs = await BatteryLog.find({ timestamp: { $gte: cutoff } })
+    const logs = await BatteryLog.find(query)
       .sort({ timestamp: 1 })
       .limit(1000)
       .lean();
@@ -146,8 +149,7 @@ router.get('/stats/history', async (req, res) => {
     const map = new Map();
 
     for (const log of logs) {
-      // Group to nearest 10-30s depending on timeframe
-      const stepMs = timeframe === '1h' ? 5000 : timeframe === '24h' ? 60000 : 300000;
+      const stepMs = timeframe === 'all' ? 900000 : selectedTimeframe.stepMs;
       const roundedTime = new Date(Math.floor(new Date(log.timestamp).getTime() / stepMs) * stepMs).toISOString();
 
       if (!map.has(roundedTime)) {
@@ -174,11 +176,17 @@ router.get('/stats/history', async (req, res) => {
         entry.bat2Temp = log.temperature;
         entry.bat2Ir = log.internalResistance;
       }
-      if (log.systemCurrent) entry.current = log.systemCurrent;
-      if (log.ambientTemperature) entry.ambientTemp = log.ambientTemperature;
+      if (log.systemCurrent !== undefined && log.systemCurrent !== null) {
+        entry.current = log.systemCurrent;
+      }
+      if (log.ambientTemperature !== undefined && log.ambientTemperature !== null) {
+        entry.ambientTemp = log.ambientTemperature;
+      }
     }
 
-    const data = Array.from(map.values());
+    const data = Array.from(map.values()).sort((a, b) => (
+      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    ));
     res.json({ source: 'mongodb_atlas', count: data.length, data });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch history stats: ' + err.message });

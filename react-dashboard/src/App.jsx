@@ -97,17 +97,12 @@ export default function App() {
       const res = await fetch(`${API_BASE}/stats/history?timeframe=${tf}`);
       if (res.ok) {
         const json = await res.json();
-        if (json.data && json.data.length > 0) {
-          setHistoricalData(json.data);
-        } else {
-          // Generate realistic placeholder points if MongoDB is empty yet
-          setHistoricalData(generateDefaultHistory());
-        }
+        setHistoricalData(Array.isArray(json.data) ? json.data : []);
       } else {
-        setHistoricalData(generateDefaultHistory());
+        setHistoricalData([]);
       }
     } catch {
-      setHistoricalData(generateDefaultHistory());
+      setHistoricalData([]);
     }
   };
 
@@ -144,28 +139,6 @@ export default function App() {
       fetchPortalLogs(currentPage, logFilters)
     ]);
     setIsRefreshing(false);
-  };
-
-  // Generate sensible synthetic points for charts when DB is initialising
-  const generateDefaultHistory = () => {
-    const points = [];
-    const now = Date.now();
-    for (let i = 30; i >= 0; i--) {
-      const t = new Date(now - i * 60000);
-      const wave = Math.sin(i / 5);
-      points.push({
-        timestamp: t.toISOString(),
-        bat1Volt: +(12.4 + wave * 0.4 + (Math.random() - 0.5) * 0.05).toFixed(2),
-        bat2Volt: +(12.3 + wave * 0.38 + (Math.random() - 0.5) * 0.05).toFixed(2),
-        bat1Temp: +(28.0 + (1 - wave) * 3).toFixed(1),
-        bat2Temp: +(28.5 + (1 - wave) * 3.2).toFixed(1),
-        bat1Ir: +(18.2 + (30 - i) * 0.01).toFixed(1),
-        bat2Ir: +(19.4 + (30 - i) * 0.012).toFixed(1),
-        current: +(3.2 + wave * 2.5).toFixed(3),
-        ambientTemp: 27.2
-      });
-    }
-    return points;
   };
 
   // -------------------------------------------------------------
