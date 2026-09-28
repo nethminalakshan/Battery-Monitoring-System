@@ -53,10 +53,6 @@
 const char* WIFI_SSID      = "Redmi 13C";
 const char* WIFI_PASSWORD  = "00000000";
 
-//const char* WIFI_SSID      = "Nethmina's Galaxy A53 5G";
-//const char* WIFI_PASSWORD  = "12345678";
-
-
 // MQTT broker - broker.hivemq.com for quick testing,
 // or your local Mosquitto IP e.g. "192.168.1.100"
 const char* MQTT_BROKER    = "broker.hivemq.com";
