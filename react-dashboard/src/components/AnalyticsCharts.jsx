@@ -56,7 +56,8 @@ const CustomTooltip = ({ active, payload, label }) => {
 export default function AnalyticsCharts({
   historicalData = [],
   timeframe = '24h',
-  onTimeframeChange
+  onTimeframeChange,
+  error = ''
 }) {
   const [activeChartTab, setActiveChartTab] = useState('voltage');
 
@@ -132,6 +133,18 @@ export default function AnalyticsCharts({
           ))}
         </div>
       </div>
+
+      {error && (
+        <div className="glass-panel" style={{ padding: '14px 18px', color: '#fbbf24', borderColor: 'rgba(245, 158, 11, 0.35)' }}>
+          {error}
+        </div>
+      )}
+
+      {!error && chartData.length === 0 && (
+        <div className="glass-panel" style={{ padding: '14px 18px', color: 'var(--text-muted)' }}>
+          No telemetry records found for the selected timeframe.
+        </div>
+      )}
 
       {/* Grid of 4 Interactive Charts */}
       <div className="charts-grid">

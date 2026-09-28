@@ -38,6 +38,7 @@ export default function App() {
   // Analytics & History
   const [timeframe, setTimeframe] = useState('24h');
   const [historicalData, setHistoricalData] = useState([]);
+  const [analyticsError, setAnalyticsError] = useState('');
   const [summaryStats, setSummaryStats] = useState(null);
 
   // Previous Logs Portal
@@ -97,12 +98,20 @@ export default function App() {
       const res = await fetch(`${API_BASE}/stats/history?timeframe=${tf}`);
       if (res.ok) {
         const json = await res.json();
-        setHistoricalData(Array.isArray(json.data) ? json.data : []);
+        if (Array.isArray(json.data)) {
+          setHistoricalData(json.data);
+          setAnalyticsError('');
+        } else {
+          setHistoricalData([]);
+          setAnalyticsError('Analytics API returned an invalid data response.');
+        }
       } else {
         setHistoricalData([]);
+        setAnalyticsError(`Analytics request failed (${res.status}).`);
       }
-    } catch {
+    } catch (err) {
       setHistoricalData([]);
+      setAnalyticsError(`Analytics service unavailable: ${err.message}`);
     }
   };
 
@@ -327,6 +336,7 @@ export default function App() {
   useEffect(() => {
     if (activeTab !== 'charts') return undefined;
 
+    fetchHistoricalAnalytics(timeframe);
     const interval = setInterval(() => {
       fetchHistoricalAnalytics(timeframe);
     }, 10000);
@@ -465,6 +475,7 @@ export default function App() {
             historicalData={historicalData}
             timeframe={timeframe}
             onTimeframeChange={handleTimeframeChange}
+            error={analyticsError}
           />
         )}
 

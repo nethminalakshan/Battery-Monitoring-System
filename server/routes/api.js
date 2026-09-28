@@ -138,21 +138,34 @@ router.get('/stats/history', async (req, res) => {
       '30d': { durationMs: 30 * 24 * 60 * 60 * 1000, stepMs: 900000 }
     };
     const selectedTimeframe = timeframes[timeframe] || timeframes['24h'];
-    let query = {};
-    if (timeframe !== 'all') {
-      const endTime = new Date();
-      query = {
-        timestamp: {
-          $gte: new Date(endTime.getTime() - selectedTimeframe.durationMs),
-          $lte: endTime
-        }
-      };
-    }
+    const buildRangeQuery = (endTime) => ({
+      timestamp: {
+        $gte: new Date(endTime.getTime() - selectedTimeframe.durationMs),
+        $lte: endTime
+      }
+    });
 
-    const logs = await BatteryLog.find(query)
+    let query = timeframe === 'all' ? {} : buildRangeQuery(new Date());
+    let logs = await BatteryLog.find(query)
       .sort({ timestamp: 1 })
       .limit(1000)
       .lean();
+
+    // Keep historical datasets visible when their timestamps are older than
+    // the server clock, while still using the live window for current data.
+    if (timeframe !== 'all' && logs.length === 0) {
+      const latestLog = await BatteryLog.findOne()
+        .sort({ timestamp: -1 })
+        .select({ timestamp: 1 })
+        .lean();
+      if (latestLog?.timestamp) {
+        query = buildRangeQuery(new Date(latestLog.timestamp));
+        logs = await BatteryLog.find(query)
+          .sort({ timestamp: 1 })
+          .limit(1000)
+          .lean();
+      }
+    }
 
     // Group logs into timestamp buckets for paired charting
     const map = new Map();
