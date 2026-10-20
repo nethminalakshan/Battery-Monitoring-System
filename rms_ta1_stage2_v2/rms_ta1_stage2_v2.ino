@@ -143,16 +143,31 @@ void handleRequest() {
   if (chainSerial.available() < 1) return;
 
   byte header = chainSerial.read();
-  if (header != REQ_HEADER) return;
+  if (header != REQ_HEADER) {
+    Serial.print("[TA-1] Ignored serial byte: 0x");
+    Serial.println(header, HEX);
+    return;
+  }
 
   unsigned long waitStart = millis();
   while (chainSerial.available() < 2) {
-    if (millis() - waitStart > 100) return; // partial frame, give up
+    if (millis() - waitStart > 100) {
+      Serial.println("[TA-1] Incomplete request after 0xAA");
+      return; // partial frame, give up
+    }
   }
   byte addr = chainSerial.read();
   byte cmd  = chainSerial.read();
 
-  if (addr != TA_ADDRESS || cmd != CMD_READ_ALL) return;
+  Serial.print("[TA-1] Request received: AA ");
+  Serial.print(addr, HEX);
+  Serial.print(" ");
+  Serial.println(cmd, HEX);
+
+  if (addr != TA_ADDRESS || cmd != CMD_READ_ALL) {
+    Serial.println("[TA-1] Request rejected: wrong address or command");
+    return;
+  }
 
   float voltage      = readCellVoltage();       // fast, ~16ms
   float tempC         = cachedTempC;              // instant, no blocking

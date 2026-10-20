@@ -72,7 +72,7 @@ SoftwareSerial rs485Serial(PIN_RS485_RX, PIN_RS485_TX);
 #define TA_REQ_HEADER   0xAA
 #define TA_RESP_HEADER  0xBB
 #define CMD_READ_ALL    0x01
-#define TA_TIMEOUT_MS   300
+#define TA_TIMEOUT_MS   600
 
 // ---- CM Protocol -------------------------------------------
 #define CM_REQ_HEADER   0xCC
@@ -186,10 +186,18 @@ TaReading pollTaModule(SoftwareSerial &link, byte addr) {
   TaReading r = { false, 0.0f, 0.0f, 0.0f };
 
   link.listen();
-  delay(2);
+  delay(3);
   while (link.available()) link.read();  // flush stale bytes
 
+  Serial.print("[TC] TA");
+  Serial.print(addr);
+  Serial.println(" request: AA");
   link.write(TA_REQ_HEADER);
+  Serial.print("[TC] TA");
+  Serial.print(addr);
+  Serial.print(" request: ");
+  Serial.print(addr, HEX);
+  Serial.println(" 01");
   link.write(addr);
   link.write((byte)CMD_READ_ALL);
   link.flush();  // Ensure the complete request has left the TC before waiting.
@@ -198,15 +206,47 @@ TaReading pollTaModule(SoftwareSerial &link, byte addr) {
   byte resp[15];
   int received = 0;
 
+  // Synchronize on the response header instead of assuming that the first
+  // received byte is the start of a frame. This protects against a stale
+  // byte or an echoed request on the isolated link.
   while (millis() - start < TA_TIMEOUT_MS && received < 15) {
-    if (link.available()) resp[received++] = link.read();
+    if (!link.available()) continue;
+
+    byte value = link.read();
+    if (received == 0) {
+      if (value != TA_RESP_HEADER) continue;
+      resp[received++] = value;
+    } else if (received == 1) {
+      if (value != addr) {
+        received = 0;
+        if (value == TA_RESP_HEADER) resp[received++] = value;
+        continue;
+      }
+      resp[received++] = value;
+    } else {
+      resp[received++] = value;
+    }
   }
 
-  if (received < 15)                              return r;
-  if (resp[0] != TA_RESP_HEADER || resp[1] != addr) return r;
+  if (received < 15) {
+    Serial.print("[TC] TA");
+    Serial.print(addr);
+    Serial.print(" response timeout: ");
+    Serial.print(received);
+    Serial.println("/15 bytes");
+    return r;
+  }
   byte chk = 0;
   for (int i = 0; i < 14; i++) chk ^= resp[i];
-  if (chk != resp[14])                            return r;
+  if (chk != resp[14]) {
+    Serial.print("[TC] TA");
+    Serial.print(addr);
+    Serial.print(" response checksum error: got 0x");
+    Serial.print(resp[14], HEX);
+    Serial.print(", expected 0x");
+    Serial.println(chk, HEX);
+    return r;
+  }
 
   memcpy(&r.voltage,     &resp[2],  4);
   memcpy(&r.tempC,       &resp[6],  4);

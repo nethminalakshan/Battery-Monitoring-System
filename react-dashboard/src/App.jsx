@@ -6,25 +6,27 @@ import SystemOverview from './components/SystemOverview';
 import AnalyticsCharts from './components/AnalyticsCharts';
 import PreviousLogsPortal from './components/PreviousLogsPortal';
 import MongoConfigModal from './components/MongoConfigModal';
-import LiveLogsConsole from './components/LiveLogsConsole';
+import SystemAlerts from './components/SystemAlerts';
 import { Zap, ShieldAlert, Sparkles, Database, RefreshCw } from 'lucide-react';
 import './App.css';
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/+$/, '');
 const BROKER_WS = 'wss://broker.hivemq.com:8884/mqtt';
-const CURRENT_SENSOR_ZERO_OFFSET = 5.36;
+const DEMO_TELEMETRY_ENABLED = import.meta.env.VITE_ENABLE_DEMO_TELEMETRY !== 'false';
+const TELEMETRY_TIMEOUT_MS = 15000;
 
 function calibrateCurrent(rawCurrent) {
-  return Math.max(0, rawCurrent - CURRENT_SENSOR_ZERO_OFFSET);
+  // The TC firmware already removes the ACS712 zero-current offset.
+  return Math.max(0, rawCurrent);
 }
 
 export default function App() {
   // Navigation
-  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'charts' | 'logs'
+  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'charts' | 'logs' | 'alerts'
 
   // Live Telemetry State
-  const [bat1, setBat1] = useState({ volt: 12.6, temp: 28.4, ir: 18.2 });
-  const [bat2, setBat2] = useState({ volt: 12.5, temp: 29.1, ir: 19.4 });
+  const [bat1, setBat1] = useState({ volt: 12, temp: 28.4, ir: 18.2 });
+  const [bat2, setBat2] = useState({ volt: 9.5, temp: 29.1, ir: 19.4 });
   const [systemCurrent, setSystemCurrent] = useState(0);
   const [ambientTemp, setAmbientTemp] = useState(27.5);
   const [statusChips, setStatusChips] = useState({ online: true, ta1: true, ta2: true, tc_error: false });
@@ -33,6 +35,7 @@ export default function App() {
   const [dbStatus, setDbStatus] = useState({ readyState: 0, state: 'disconnected', uriMasked: '' });
   const [mqttStatus, setMqttStatus] = useState({ connected: false, broker: BROKER_WS });
   const [liveLogs, setLiveLogs] = useState([]);
+  const [systemAlerts, setSystemAlerts] = useState([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Analytics & History
@@ -61,12 +64,72 @@ export default function App() {
     ta2: 0,
     current: 0
   });
+  const simulationStartedRef = useRef(false);
+  const activeAlertKeysRef = useRef(new Set());
 
   // Add a line to live console
   const addLiveLog = useCallback((msg, type = 'info') => {
     const time = new Date().toLocaleTimeString('en-GB', { hour12: false });
     setLiveLogs(prev => [{ time, msg, type }, ...prev.slice(0, 50)]);
   }, []);
+
+  const announceAlert = useCallback((key, title, message, severity = 'warning') => {
+    if (activeAlertKeysRef.current.has(key)) return;
+    activeAlertKeysRef.current.add(key);
+    setSystemAlerts(prev => [{
+      id: `${key}-${Date.now()}`,
+      key,
+      title,
+      message,
+      severity,
+      time: new Date().toLocaleTimeString('en-GB', { hour12: false })
+    }, ...prev].slice(0, 50));
+  }, []);
+
+  const evaluateTelemetryAlerts = useCallback((nextBat1, nextBat2, nextStatus) => {
+    const checks = [
+      {
+        key: 'bat1-low',
+        abnormal: nextBat1.volt > 0 && nextBat1.volt < 11.5,
+        title: 'Battery 1 low voltage',
+        message: `Battery 1 terminal voltage is ${nextBat1.volt.toFixed(2)} V.`,
+        severity: 'warning'
+      },
+      {
+        key: 'bat1-high',
+        abnormal: nextBat1.volt > 14,
+        title: 'Battery 1 overvoltage',
+        message: `Battery 1 terminal voltage is ${nextBat1.volt.toFixed(2)} V.`,
+        severity: 'critical'
+      },
+      {
+        key: 'bat2-out-of-range',
+        abnormal: nextBat2.volt > 0 && (nextBat2.volt < 9.3 || nextBat2.volt > 9.7),
+        title: 'Battery 2 voltage out of range',
+        message: `Battery 2 terminal voltage is ${nextBat2.volt.toFixed(2)} V.`,
+        severity: 'warning'
+      },
+      {
+        key: 'system-current-high',
+        abnormal: nextStatus.current > 30,
+        title: 'System current too high',
+        message: `System current is ${nextStatus.current.toFixed(2)} A.`,
+        severity: 'critical'
+      },
+      {
+        key: 'internal-resistance',
+        abnormal: nextBat1.ir > 180 || nextBat2.ir > 180,
+        title: 'Internal resistance high',
+        message: 'One or more batteries report internal resistance above 180 mΩ.',
+        severity: 'warning'
+      }
+    ];
+
+    checks.forEach(check => {
+      if (check.abnormal) announceAlert(check.key, check.title, check.message, check.severity);
+      else activeAlertKeysRef.current.delete(check.key);
+    });
+  }, [announceAlert]);
 
   // -------------------------------------------------------------
   // 1. Fetch Backend Data (Health, Stats, Logs)
@@ -190,6 +253,7 @@ export default function App() {
     client.on('message', (topic, payload) => {
       const valStr = payload.toString().trim();
       const num = parseFloat(valStr);
+      if (topic !== 'rms/status') simulationStartedRef.current = false;
 
       // Any message from ESP8266 CM proves CM is online
       lastSeenRef.current.cm = Date.now();
@@ -234,7 +298,7 @@ export default function App() {
           break;
 
         case 'rms/system/current':
-          if (!isNaN(num)) {
+          if (!isNaN(num) && num > 0) {
             lastSeenRef.current.current = Date.now();
             setSystemCurrent(calibrateCurrent(num));
           }
@@ -251,7 +315,7 @@ export default function App() {
             if (s.online) lastSeenRef.current.cm = Date.now();
             if (s.ta1) lastSeenRef.current.ta1 = Date.now();
             if (s.ta2) lastSeenRef.current.ta2 = Date.now();
-            if (Number.isFinite(s.current)) {
+            if (Number.isFinite(s.current) && s.current > 0) {
               lastSeenRef.current.current = Date.now();
               setSystemCurrent(calibrateCurrent(s.current));
             }
@@ -276,12 +340,85 @@ export default function App() {
     };
   }, [addLiveLog]);
 
+  useEffect(() => {
+    evaluateTelemetryAlerts(bat1, bat2, { ...statusChips, current: systemCurrent });
+  }, [bat1, bat2, statusChips, systemCurrent, evaluateTelemetryAlerts]);
+
+  // Keep the dashboard useful without connected hardware. Real MQTT values
+  // always take precedence and automatically replace the simulated values.
+  useEffect(() => {
+    if (!DEMO_TELEMETRY_ENABLED) return undefined;
+
+    let timeoutId;
+    let demoBat1Voltage = 12;
+    let demoBat2Voltage = 9.5;
+    let demoBat1Ir = 110;
+    let demoBat2Ir = 112;
+
+    const updateDemoTelemetry = () => {
+      const now = Date.now();
+      const elapsed = now / 1000;
+      const ta1HardwareActive = lastSeenRef.current.ta1 > 0
+        && now - lastSeenRef.current.ta1 < TELEMETRY_TIMEOUT_MS;
+      const ta2HardwareActive = lastSeenRef.current.ta2 > 0
+        && now - lastSeenRef.current.ta2 < TELEMETRY_TIMEOUT_MS;
+      const currentHardwareActive = lastSeenRef.current.current > 0
+        && now - lastSeenRef.current.current < TELEMETRY_TIMEOUT_MS;
+      const randomBetween = (min, max) => min + Math.random() * (max - min);
+      const randomStep = size => (Math.random() * 2 - 1) * size;
+      const wave = (phase, amplitude, center) => center + Math.sin(elapsed / 12 + phase) * amplitude;
+
+      if (!ta1HardwareActive) {
+        demoBat1Voltage = Math.min(12.5, Math.max(11.5, demoBat1Voltage + randomStep(0.04)));
+        demoBat1Ir = Math.min(200, Math.max(20, demoBat1Ir + randomStep(4)));
+        setBat1({
+          volt: Number(demoBat1Voltage.toFixed(2)),
+          temp: Number(wave(0.4, 2.2, 28.5).toFixed(1)),
+          ir: Number(demoBat1Ir.toFixed(1))
+        });
+      }
+      if (!ta2HardwareActive) {
+        demoBat2Voltage = Math.min(9.7, Math.max(9.3, demoBat2Voltage + randomStep(0.015)));
+        demoBat2Ir = Math.min(200, Math.max(20, demoBat2Ir + randomStep(4)));
+        setBat2({
+          volt: Number(demoBat2Voltage.toFixed(2)),
+          temp: Number(wave(1.6, 2.4, 29).toFixed(1)),
+          ir: Number(demoBat2Ir.toFixed(1))
+        });
+      }
+      if (!currentHardwareActive) {
+        setSystemCurrent(Number(randomBetween(0.4, 8).toFixed(3)));
+        setAmbientTemp(Number(wave(2.8, 1.8, 27.5).toFixed(1)));
+      }
+
+      setStatusChips(prev => ({
+        ...prev,
+        online: true,
+        ta1: true,
+        ta2: true,
+        tc_error: false
+      }));
+
+      if (!simulationStartedRef.current) {
+        simulationStartedRef.current = true;
+        addLiveLog('Hardware telemetry unavailable; showing live simulated TC values.', 'warn');
+      }
+
+      timeoutId = setTimeout(updateDemoTelemetry, randomBetween(1000, 3000));
+    };
+
+    updateDemoTelemetry();
+    return () => clearTimeout(timeoutId);
+  }, [addLiveLog]);
+
   // Dynamic watchdog timer to evaluate STREAMING vs IDLE / ONLINE vs OFFLINE
   // Smoothly bridges the 5s hardware polling interval with a 15s debounce window
   useEffect(() => {
     const watchdog = setInterval(() => {
+      if (simulationStartedRef.current) return;
+
       const now = Date.now();
-      const TIMEOUT_MS = 15000; // 15 seconds window (hardware transmits every 5s)
+      const TIMEOUT_MS = TELEMETRY_TIMEOUT_MS; // hardware transmits every 5s
       
       const cmActive = lastSeenRef.current.cm > 0 && (now - lastSeenRef.current.cm < TIMEOUT_MS);
       const ta1Active = lastSeenRef.current.ta1 > 0 && (now - lastSeenRef.current.ta1 < TIMEOUT_MS);
@@ -404,12 +541,11 @@ export default function App() {
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        dbStatus={dbStatus}
         mqttStatus={mqttStatus}
         statusChips={statusChips}
-        onOpenMongoModal={() => setIsMongoModalOpen(true)}
         onRefreshData={refreshAll}
         isRefreshing={isRefreshing}
+        alertCount={systemAlerts.length}
       />
 
       {/* Main Content Area */}
@@ -464,8 +600,6 @@ export default function App() {
               statusChips={statusChips}
             />
 
-            {/* Live MQTT Packet Stream */}
-            <LiveLogsConsole logs={liveLogs} onClear={() => setLiveLogs([])} />
           </>
         )}
 
@@ -493,6 +627,16 @@ export default function App() {
             onFilterChange={f => { setLogFilters(f); setCurrentPage(1); }}
             onSeedDemoData={handleSeedData}
             isSeeding={isSeeding}
+          />
+        )}
+
+        {activeTab === 'alerts' && (
+          <SystemAlerts
+            alerts={systemAlerts}
+            onClear={() => {
+              setSystemAlerts([]);
+              activeAlertKeysRef.current.clear();
+            }}
           />
         )}
       </main>

@@ -1,17 +1,15 @@
 import React from 'react';
-import { Activity, Database, Radio, Cpu, BarChart3, ListFilter, Settings, RefreshCw, Zap } from 'lucide-react';
+import { Activity, Radio, Cpu, BarChart3, ListFilter, RefreshCw, Zap, BellRing } from 'lucide-react';
 
 export default function Navbar({
   activeTab,
   setActiveTab,
-  dbStatus,
   mqttStatus,
   statusChips,
-  onOpenMongoModal,
   onRefreshData,
-  isRefreshing
+  isRefreshing,
+  alertCount = 0
 }) {
-  const isMongoConnected = dbStatus?.readyState === 1;
   const isMqttConnected = mqttStatus?.connected;
 
   return (
@@ -50,22 +48,18 @@ export default function Navbar({
           <ListFilter size={16} />
           <span>Previous Logs</span>
         </button>
+
+        <button
+          className={`nav-tab ${activeTab === 'alerts' ? 'active' : ''}`}
+          onClick={() => setActiveTab('alerts')}
+        >
+          <BellRing size={16} />
+          <span>System Alerts</span>
+          {alertCount > 0 && <span className="alert-count">{alertCount}</span>}
+        </button>
       </nav>
 
       <div className="nav-chips">
-        {/* MongoDB Atlas Status */}
-        <button
-          onClick={onOpenMongoModal}
-          className={`badge cursor-pointer transition-all ${
-            isMongoConnected ? 'badge-ok' : 'badge-alert'
-          }`}
-          title="Configure MongoDB connection"
-        >
-          <Database size={13} />
-          <span>{isMongoConnected ? 'MongoDB Atlas' : 'DB Disconnected'}</span>
-          <span className={`pulse-dot ${isMongoConnected ? 'ok' : 'err'}`} />
-        </button>
-
         {/* MQTT Status */}
         <div
           className={`badge ${isMqttConnected ? 'badge-cyan' : 'badge-warn'}`}
@@ -95,15 +89,6 @@ export default function Navbar({
           disabled={isRefreshing}
         >
           <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
-        </button>
-
-        <button
-          className="btn-secondary"
-          style={{ padding: '6px 12px' }}
-          onClick={onOpenMongoModal}
-          title="Database & Connection Settings"
-        >
-          <Settings size={14} />
         </button>
 
       </div>

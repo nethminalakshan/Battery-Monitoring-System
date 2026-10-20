@@ -7,10 +7,9 @@ const V_MIN = 10.5;
 const V_LOW = 11.5;
 const V_HIGH = 14.0;
 const V_MAX = 14.4;
-const CURRENT_SENSOR_ZERO_OFFSET = 5.36;
-
 function calibrateCurrent(rawCurrent) {
-  return Math.max(0, rawCurrent - CURRENT_SENSOR_ZERO_OFFSET);
+  // The TC firmware already removes the ACS712 zero-current offset.
+  return Math.max(0, rawCurrent);
 }
 
 export const state = {

@@ -1,10 +1,50 @@
 import React from 'react';
-import { BatteryCharging, BatteryWarning, Thermometer, Gauge, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { BatteryCharging, ShieldCheck, AlertTriangle } from 'lucide-react';
 
-const V_MIN = 10.5;
-const V_MAX = 14.4;
 const V_LOW = 11.5;
 const V_HIGH = 14.0;
+
+function AnalogMeter({ label, value, unit, min, max, color, decimals = 1, alert = false, warning = false }) {
+  const radius = 38;
+  const circumference = Math.PI * radius;
+  const fraction = Math.min(Math.max((value - min) / (max - min), 0), 1);
+  const dashOffset = circumference * (1 - fraction);
+
+  return (
+    <div className="analog-meter">
+      <div className="analog-meter-label">{label}</div>
+      <svg viewBox="0 0 100 62" className="analog-meter-svg" role="img" aria-label={`${label}: ${value.toFixed(decimals)} ${unit}`}>
+        <path
+          d="M 12 50 A 38 38 0 0 1 88 50"
+          fill="none"
+          stroke="rgba(255, 255, 255, 0.08)"
+          strokeWidth="8"
+          strokeLinecap="round"
+        />
+        <path
+          d="M 12 50 A 38 38 0 0 1 88 50"
+          fill="none"
+          stroke={alert ? 'var(--rose-core)' : warning ? 'var(--amber-core)' : color}
+          strokeWidth="8"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={dashOffset}
+          style={{ transition: 'stroke-dashoffset 0.6s ease' }}
+        />
+        <text x="50" y="43" textAnchor="middle" className="analog-meter-value">
+          {value.toFixed(decimals)}
+        </text>
+        <text x="50" y="56" textAnchor="middle" className="analog-meter-unit">
+          {unit}
+        </text>
+      </svg>
+      <div className="analog-meter-scale">
+        <span>{min}</span>
+        <span>{max}</span>
+      </div>
+    </div>
+  );
+}
 
 export default function BatteryCard({
   batteryId,
@@ -15,9 +55,7 @@ export default function BatteryCard({
   const temp = data.temp || 0;
   const ir = data.ir || 0;
 
-  // Calculate percentage based on 12V Lead-Acid nominal operating curve
-  const pct = Math.min(Math.max(Math.round(((volt - V_MIN) / (V_MAX - V_MIN)) * 100), 0), 100);
-
+  const isBat2 = batteryId === 2;
   // Status & Color logic
   let statusText = 'Normal';
   let statusLevel = 'ok';
@@ -40,8 +78,6 @@ export default function BatteryCard({
     statusText = 'Standby / Offline';
     statusLevel = 'warn';
   }
-
-  const isBat2 = batteryId === 2;
 
   return (
     <div className={`glass-panel battery-card ${isBat2 ? 'bat2' : ''}`}>
@@ -69,72 +105,38 @@ export default function BatteryCard({
         </div>
       </div>
 
-      {/* Charge Level Bar */}
-      <div className="charge-visualizer">
-        <div className="charge-info">
-          <span style={{ color: 'var(--text-secondary)' }}>State of Charge (SoC)</span>
-          <span className="font-mono" style={{ color: 'var(--cyan-core)' }}>
-            {pct}%
-          </span>
-        </div>
-        <div className="charge-bar-track">
-          <div
-            className="charge-bar-fill"
-            style={{
-              width: `${pct}%`,
-              backgroundColor:
-                volt < V_LOW
-                  ? 'var(--rose-core)'
-                  : volt > V_HIGH
-                  ? 'var(--amber-core)'
-                  : undefined
-            }}
-          />
-        </div>
-      </div>
-
-      {/* Metric 3-Column Readout */}
-      <div className="metric-row">
-        {/* Voltage */}
-        <div className="metric-box">
-          <span className="metric-label">Terminal Voltage</span>
-          <div className="metric-value-wrap">
-            <span
-              className={`metric-number ${
-                volt < V_LOW ? 'alert' : volt > V_HIGH ? 'warn' : 'normal'
-              }`}
-            >
-              {volt > 0 ? volt.toFixed(2) : '0.00'}
-            </span>
-            <span className="metric-unit">V</span>
-          </div>
-        </div>
-
-        {/* Temperature */}
-        <div className="metric-box">
-          <span className="metric-label">Cell Temperature</span>
-          <div className="metric-value-wrap">
-            <span
-              className={`metric-number ${
-                hasTempSensor && temp > 45 ? 'alert' : hasTempSensor && temp > 35 ? 'warn' : ''
-              }`}
-            >
-              {hasTempSensor ? temp.toFixed(1) : 'N/A'}
-            </span>
-            <span className="metric-unit">{hasTempSensor ? '°C' : ''}</span>
-          </div>
-        </div>
-
-        {/* Internal Resistance */}
-        <div className="metric-box">
-          <span className="metric-label">Internal Resist.</span>
-          <div className="metric-value-wrap">
-            <span className="metric-number" style={{ color: '#a78bfa' }}>
-              {ir > 0 ? ir.toFixed(1) : '0.0'}
-            </span>
-            <span className="metric-unit">mΩ</span>
-          </div>
-        </div>
+      <div className="analog-meter-row">
+        <AnalogMeter
+          label="Terminal Voltage"
+          value={volt}
+          unit="V"
+          min={0}
+          max={15}
+          color="var(--cyan-core)"
+          decimals={2}
+          alert={volt > 0 && volt < V_LOW}
+          warning={volt > V_HIGH}
+        />
+        <AnalogMeter
+          label="Cell Temperature"
+          value={hasTempSensor ? temp : 0}
+          unit="°C"
+          min={0}
+          max={60}
+          color="var(--amber-core)"
+          alert={hasTempSensor && temp > 45}
+          warning={hasTempSensor && temp > 35}
+        />
+        <AnalogMeter
+          label="Internal Resistance"
+          value={ir}
+          unit="mΩ"
+          min={0}
+          max={200}
+          color="#a78bfa"
+          decimals={1}
+          warning={ir > 180}
+        />
       </div>
     </div>
   );
