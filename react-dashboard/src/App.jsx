@@ -96,6 +96,34 @@ export default function App() {
   const evaluateTelemetryAlerts = useCallback((nextBat1, nextBat2, nextStatus) => {
     const checks = [
       {
+        key: 'cm-offline',
+        abnormal: nextStatus.online === false,
+        title: 'ESP8266 CM offline',
+        message: 'The central monitor is not reporting telemetry.',
+        severity: 'critical'
+      },
+      {
+        key: 'ta1-idle',
+        abnormal: nextStatus.ta1 === false,
+        title: 'Battery 1 sensor idle',
+        message: 'Sensor TA1 is not sending battery 1 telemetry.',
+        severity: 'warning'
+      },
+      {
+        key: 'ta2-idle',
+        abnormal: nextStatus.ta2 === false,
+        title: 'Battery 2 sensor idle',
+        message: 'Sensor TA2 is not sending battery 2 telemetry.',
+        severity: 'warning'
+      },
+      {
+        key: 'tc-error',
+        abnormal: nextStatus.tc_error === true,
+        title: 'TC module communication error',
+        message: 'The central transceiver reported a communication failure.',
+        severity: 'critical'
+      },
+      {
         key: 'bat1-low',
         abnormal: nextBat1.volt > 0 && nextBat1.volt < ALERT_THRESHOLDS.bat1.lowVoltage,
         title: 'Battery 1 low voltage',
@@ -430,6 +458,12 @@ export default function App() {
       if (!simulationStartedRef.current) {
         simulationStartedRef.current = true;
         addLiveLog('Hardware telemetry unavailable; showing live simulated TC values.', 'warn');
+        announceAlert(
+          'demo-monitoring',
+          'Demo monitoring alert',
+          'This test alert confirms that the System Alerts panel is receiving live monitoring events.',
+          'info'
+        );
       }
 
       timeoutId = setTimeout(updateDemoTelemetry, randomBetween(1000, 3000));
@@ -437,7 +471,7 @@ export default function App() {
 
     updateDemoTelemetry();
     return () => clearTimeout(timeoutId);
-  }, [addLiveLog]);
+  }, [addLiveLog, announceAlert]);
 
   // Dynamic watchdog timer to evaluate STREAMING vs IDLE / ONLINE vs OFFLINE
   // Smoothly bridges the 5s hardware polling interval with a 15s debounce window
