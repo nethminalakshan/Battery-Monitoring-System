@@ -14,6 +14,13 @@ const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/+$/, '
 const BROKER_WS = 'wss://broker.hivemq.com:8884/mqtt';
 const DEMO_TELEMETRY_ENABLED = import.meta.env.VITE_ENABLE_DEMO_TELEMETRY !== 'false';
 const TELEMETRY_TIMEOUT_MS = 15000;
+const ALERT_THRESHOLDS = {
+  bat1: { lowVoltage: 11.5, highVoltage: 14 },
+  bat2: { lowVoltage: 9.3, highVoltage: 9.7 },
+  lowCurrent: 0.3,
+  highCurrent: 30,
+  highResistance: 180
+};
 
 function calibrateCurrent(rawCurrent) {
   // The TC firmware already removes the ACS712 zero-current offset.
@@ -90,37 +97,51 @@ export default function App() {
     const checks = [
       {
         key: 'bat1-low',
-        abnormal: nextBat1.volt > 0 && nextBat1.volt < 11.5,
+        abnormal: nextBat1.volt > 0 && nextBat1.volt < ALERT_THRESHOLDS.bat1.lowVoltage,
         title: 'Battery 1 low voltage',
         message: `Battery 1 terminal voltage is ${nextBat1.volt.toFixed(2)} V.`,
         severity: 'warning'
       },
       {
         key: 'bat1-high',
-        abnormal: nextBat1.volt > 14,
+        abnormal: nextBat1.volt > ALERT_THRESHOLDS.bat1.highVoltage,
         title: 'Battery 1 overvoltage',
         message: `Battery 1 terminal voltage is ${nextBat1.volt.toFixed(2)} V.`,
         severity: 'critical'
       },
       {
-        key: 'bat2-out-of-range',
-        abnormal: nextBat2.volt > 0 && (nextBat2.volt < 9.3 || nextBat2.volt > 9.7),
-        title: 'Battery 2 voltage out of range',
+        key: 'bat2-low',
+        abnormal: nextBat2.volt > 0 && nextBat2.volt < ALERT_THRESHOLDS.bat2.lowVoltage,
+        title: 'Battery 2 low voltage',
         message: `Battery 2 terminal voltage is ${nextBat2.volt.toFixed(2)} V.`,
         severity: 'warning'
       },
       {
+        key: 'bat2-high',
+        abnormal: nextBat2.volt > ALERT_THRESHOLDS.bat2.highVoltage,
+        title: 'Battery 2 overvoltage',
+        message: `Battery 2 terminal voltage is ${nextBat2.volt.toFixed(2)} V.`,
+        severity: 'critical'
+      },
+      {
+        key: 'system-current-low',
+        abnormal: nextStatus.currentAvailable && nextStatus.current < ALERT_THRESHOLDS.lowCurrent,
+        title: 'System current too low',
+        message: `System current is ${nextStatus.current.toFixed(2)} A.`,
+        severity: 'warning'
+      },
+      {
         key: 'system-current-high',
-        abnormal: nextStatus.current > 30,
+        abnormal: nextStatus.currentAvailable && nextStatus.current > ALERT_THRESHOLDS.highCurrent,
         title: 'System current too high',
         message: `System current is ${nextStatus.current.toFixed(2)} A.`,
         severity: 'critical'
       },
       {
         key: 'internal-resistance',
-        abnormal: nextBat1.ir > 180 || nextBat2.ir > 180,
+        abnormal: nextBat1.ir > ALERT_THRESHOLDS.highResistance || nextBat2.ir > ALERT_THRESHOLDS.highResistance,
         title: 'Internal resistance high',
-        message: 'One or more batteries report internal resistance above 180 mΩ.',
+        message: `One or more batteries report internal resistance above ${ALERT_THRESHOLDS.highResistance} mΩ.`,
         severity: 'warning'
       }
     ];
@@ -144,7 +165,10 @@ export default function App() {
         // Only adopt backend status chips if direct MQTT telemetry hasn't been received recently
         const now = Date.now();
         const hasDirectMqttTelemetry = lastSeenRef.current.cm > 0 && (now - lastSeenRef.current.cm < 15000);
-        if (!hasDirectMqttTelemetry && data.telemetry?.status) {
+        // Demo telemetry owns the status ribbon while no hardware stream is
+        // available; otherwise the 5-second health poll can briefly overwrite
+        // the simulated ONLINE/STREAMING state with the backend's stale state.
+        if (!hasDirectMqttTelemetry && !simulationStartedRef.current && data.telemetry?.status) {
           setStatusChips(prev => ({
             ...prev,
             ...data.telemetry.status
@@ -298,7 +322,7 @@ export default function App() {
           break;
 
         case 'rms/system/current':
-          if (!isNaN(num) && num > 0) {
+          if (!isNaN(num)) {
             lastSeenRef.current.current = Date.now();
             setSystemCurrent(calibrateCurrent(num));
           }
@@ -315,7 +339,7 @@ export default function App() {
             if (s.online) lastSeenRef.current.cm = Date.now();
             if (s.ta1) lastSeenRef.current.ta1 = Date.now();
             if (s.ta2) lastSeenRef.current.ta2 = Date.now();
-            if (Number.isFinite(s.current) && s.current > 0) {
+            if (Number.isFinite(s.current)) {
               lastSeenRef.current.current = Date.now();
               setSystemCurrent(calibrateCurrent(s.current));
             }
@@ -341,7 +365,11 @@ export default function App() {
   }, [addLiveLog]);
 
   useEffect(() => {
-    evaluateTelemetryAlerts(bat1, bat2, { ...statusChips, current: systemCurrent });
+    evaluateTelemetryAlerts(bat1, bat2, {
+      ...statusChips,
+      current: systemCurrent,
+      currentAvailable: lastSeenRef.current.current > 0 || simulationStartedRef.current
+    });
   }, [bat1, bat2, statusChips, systemCurrent, evaluateTelemetryAlerts]);
 
   // Keep the dashboard useful without connected hardware. Real MQTT values
@@ -430,7 +458,7 @@ export default function App() {
       }
 
       setStatusChips(prev => {
-        const nextOnline = cmActive || prev.online;
+        const nextOnline = cmActive;
         const nextTa1 = ta1Active;
         const nextTa2 = ta2Active;
 
