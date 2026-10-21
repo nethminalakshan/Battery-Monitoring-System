@@ -96,34 +96,6 @@ export default function App() {
   const evaluateTelemetryAlerts = useCallback((nextBat1, nextBat2, nextStatus) => {
     const checks = [
       {
-        key: 'cm-offline',
-        abnormal: nextStatus.online === false,
-        title: 'ESP8266 CM offline',
-        message: 'The central monitor is not reporting telemetry.',
-        severity: 'critical'
-      },
-      {
-        key: 'ta1-idle',
-        abnormal: nextStatus.ta1 === false,
-        title: 'Battery 1 sensor idle',
-        message: 'Sensor TA1 is not sending battery 1 telemetry.',
-        severity: 'warning'
-      },
-      {
-        key: 'ta2-idle',
-        abnormal: nextStatus.ta2 === false,
-        title: 'Battery 2 sensor idle',
-        message: 'Sensor TA2 is not sending battery 2 telemetry.',
-        severity: 'warning'
-      },
-      {
-        key: 'tc-error',
-        abnormal: nextStatus.tc_error === true,
-        title: 'TC module communication error',
-        message: 'The central transceiver reported a communication failure.',
-        severity: 'critical'
-      },
-      {
         key: 'bat1-low',
         abnormal: nextBat1.volt > 0 && nextBat1.volt < ALERT_THRESHOLDS.bat1.lowVoltage,
         title: 'Battery 1 low voltage',
@@ -350,7 +322,7 @@ export default function App() {
           break;
 
         case 'rms/system/current':
-          if (!isNaN(num)) {
+          if (!DEMO_TELEMETRY_ENABLED && !isNaN(num)) {
             lastSeenRef.current.current = Date.now();
             setSystemCurrent(calibrateCurrent(num));
           }
@@ -367,7 +339,7 @@ export default function App() {
             if (s.online) lastSeenRef.current.cm = Date.now();
             if (s.ta1) lastSeenRef.current.ta1 = Date.now();
             if (s.ta2) lastSeenRef.current.ta2 = Date.now();
-            if (Number.isFinite(s.current)) {
+            if (!DEMO_TELEMETRY_ENABLED && Number.isFinite(s.current)) {
               lastSeenRef.current.current = Date.now();
               setSystemCurrent(calibrateCurrent(s.current));
             }
@@ -396,7 +368,7 @@ export default function App() {
     evaluateTelemetryAlerts(bat1, bat2, {
       ...statusChips,
       current: systemCurrent,
-      currentAvailable: lastSeenRef.current.current > 0 || simulationStartedRef.current
+      currentAvailable: !simulationStartedRef.current && lastSeenRef.current.current > 0
     });
   }, [bat1, bat2, statusChips, systemCurrent, evaluateTelemetryAlerts]);
 
@@ -418,15 +390,19 @@ export default function App() {
         && now - lastSeenRef.current.ta1 < TELEMETRY_TIMEOUT_MS;
       const ta2HardwareActive = lastSeenRef.current.ta2 > 0
         && now - lastSeenRef.current.ta2 < TELEMETRY_TIMEOUT_MS;
-      const currentHardwareActive = lastSeenRef.current.current > 0
-        && now - lastSeenRef.current.current < TELEMETRY_TIMEOUT_MS;
       const randomBetween = (min, max) => min + Math.random() * (max - min);
       const randomStep = size => (Math.random() * 2 - 1) * size;
       const wave = (phase, amplitude, center) => center + Math.sin(elapsed / 12 + phase) * amplitude;
 
       if (!ta1HardwareActive) {
-        demoBat1Voltage = Math.min(12.5, Math.max(11.5, demoBat1Voltage + randomStep(0.04)));
-        demoBat1Ir = Math.min(200, Math.max(20, demoBat1Ir + randomStep(4)));
+        const voltageAlert = Math.random() < 0.2;
+        const resistanceAlert = Math.random() < 0.2;
+        demoBat1Voltage = voltageAlert
+          ? randomBetween(10.6, 11.3)
+          : Math.min(12.5, Math.max(11.5, demoBat1Voltage + randomStep(0.04)));
+        demoBat1Ir = resistanceAlert
+          ? randomBetween(185, 220)
+          : Math.min(170, Math.max(20, demoBat1Ir + randomStep(4)));
         setBat1({
           volt: Number(demoBat1Voltage.toFixed(2)),
           temp: Number(wave(0.4, 2.2, 28.5).toFixed(1)),
@@ -434,18 +410,22 @@ export default function App() {
         });
       }
       if (!ta2HardwareActive) {
-        demoBat2Voltage = Math.min(9.7, Math.max(9.3, demoBat2Voltage + randomStep(0.015)));
-        demoBat2Ir = Math.min(200, Math.max(20, demoBat2Ir + randomStep(4)));
+        const voltageAlert = Math.random() < 0.2;
+        const resistanceAlert = Math.random() < 0.2;
+        demoBat2Voltage = voltageAlert
+          ? (Math.random() < 0.5 ? randomBetween(8.7, 9.2) : randomBetween(9.8, 10.4))
+          : Math.min(9.7, Math.max(9.3, demoBat2Voltage + randomStep(0.015)));
+        demoBat2Ir = resistanceAlert
+          ? randomBetween(185, 220)
+          : Math.min(170, Math.max(20, demoBat2Ir + randomStep(4)));
         setBat2({
           volt: Number(demoBat2Voltage.toFixed(2)),
           temp: Number(wave(1.6, 2.4, 29).toFixed(1)),
           ir: Number(demoBat2Ir.toFixed(1))
         });
       }
-      if (!currentHardwareActive) {
-        setSystemCurrent(Number(randomBetween(0.4, 8).toFixed(3)));
-        setAmbientTemp(Number(wave(2.8, 1.8, 27.5).toFixed(1)));
-      }
+      setSystemCurrent(0);
+      setAmbientTemp(Number(wave(2.8, 1.8, 27.5).toFixed(1)));
 
       setStatusChips(prev => ({
         ...prev,
@@ -458,12 +438,6 @@ export default function App() {
       if (!simulationStartedRef.current) {
         simulationStartedRef.current = true;
         addLiveLog('Hardware telemetry unavailable; showing live simulated TC values.', 'warn');
-        announceAlert(
-          'demo-monitoring',
-          'Demo monitoring alert',
-          'This test alert confirms that the System Alerts panel is receiving live monitoring events.',
-          'info'
-        );
       }
 
       timeoutId = setTimeout(updateDemoTelemetry, randomBetween(1000, 3000));
